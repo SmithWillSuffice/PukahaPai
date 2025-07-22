@@ -63,6 +63,12 @@ GovSpend and or Tax rate adjustments with a lag, in response to rising GovDebt p
 |  | |  |
 
 
+### Simulation Use Case Studies
+
+1. Monte Carlo Studies for NZ — for forecasting. What will unemployment be? What it were MMT instead?
+2. Policy Games — run batch simulations, with designed policy response (a "regime" of government).
+3. Intearctive Response Game — use adaptive responses. Thus more varied. The user tries a Deficit Target policy, but then changes to Inflation Target, then to Employment Target.
+
 
 See the [TODO](#todo) section for recent development tasks.
 
