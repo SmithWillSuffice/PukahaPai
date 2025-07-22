@@ -24,7 +24,45 @@ only ever care about a short run forecast!_
 No geopoltics. The model is for (relative)
 peace time policy analsysis only. 
 
----
+
+## MMT Macroeconomics Considerations
+
+I have not yet settled on the modelling specifics. 
+
+**Features to implement:**
+1. Stock-Flow consistent, by using Godley Tables.
+2. Employment — **noooo NAIRU!**. I want to try some basic government centered model, which really is _always_ a Job Guarantee, but the parameter worst case setting is `neolib` =  JG with zero work, only welfare (basic income).
+3. Interest Rate — banks operate on spread. CB rate is policy, but can be a response function to unemployment, since that's present policy, so the regressive basic income. But the MMT Base Case **for comparison** is ZIRP.
+4. Prices — probably a dual model. Government prices plus gauge, then market prices.
+5. Wages — a special type of price. So also government policy response.
+6. Anti-MMT Model — Maybe make it model specific whether the policy target is the Deficit or Full Employment or Inflation. Maye implies Three Model Types.
+
+### Three Base Model Types
+
+**Policy target = Full Employment:** =  MMT Owl Base case.  
+**Policy target = Inflation:** =  PPK Dove Base case.  
+**Policy target = Deficit/Debt:** =  Neolib Hawk Base case.
+
+#### Policy target = Full Employment:  MMT Owl Base case.  
+
+Use the Levey price model, or Government gauge then Cost + Mark-up. 
+
+#### Policy target = Inflation:   PK Dove Base case.  
+
+GovSpend and or Tax rate adjustments with a lag, in response to rising price level.
+
+#### Policy target = Deficit/Debt:   Neolib Hawk Base case.
+
+GovSpend and or Tax rate adjustments with a lag, in response to rising GovDebt per capita.
+
+**Hypotheses:**  
+|  MMT  | PK Dove | Neolib  |
+| --- | --- | --- |
+| _MMT Base Case is the most stable, with highest productivity and lowest income inequality._ | Low inflation, but higher unemployment, so lower output per capita. | Highest income inequality, lower output per capita.Inflation moderate to low depending on IR. | 
+| (Regardless of inflation.) | |  |
+|  | |  |
+
+
 
 See the [TODO](#todo) section for recent development tasks.
 
@@ -282,8 +320,6 @@ The program `pukahaPai` is the GUIO controller.  So far I have tested the
 compatible Julia program stills runs ok stand-alone.
 
 
-
-
 ## Example — Pendulum
 
 For a pendulum of mass $m$, length $L$, damping coefficient $\gamma$, and
@@ -340,8 +376,6 @@ julia models/lorenz_attractor_cmdl.jl
 **Short List:**
 * Get basic pendulum example working with GUI.
    - [✔] GUI controller + Julia Solver.
-   - [] Get an init `time_window` fixed but allow user to start the simulation
-     with a new `t1`, so we see the window "move" or scroll.
    - [] Add a button to "Save Model" which presently should just run the plotly
      html plot script. Later we could add some other form of archiving, like
      saving the Julia script pair plus CSV to a subsubfolder?
@@ -350,10 +384,13 @@ julia models/lorenz_attractor_cmdl.jl
    - [] Time series plotting ok.
    - [] Add phase plots to dpg??? (Via embedded html, or via PNG?) 
 
+Next: also see the [MMT Considertations section](#mmt-macroeconomics-considerations) above.
 * Get a basic MMT Minksy model working on the cmdl
    - [] Maybe try a "dumb" hard coded toml model first?
-   - [] Use the Godley table preprocessor, etc., from earlier years, to help write the toml spec file.
-   - [] Migrate to the GUI.
+   - [] Use the Godley table preprocessor, etc., from earlier years, to help
+     write the toml spec file.
+   - [] Migrate this to the GUI, an advanced feature would be a Godley Table tab
+     in dpg? But first see if we can fit enough parameters on the control panel.
 
 
 **Long Wishlist:**
