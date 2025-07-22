@@ -42,12 +42,10 @@ MODELS_DIR = "./models"
 SHM_NAME = "pukaha_shared"
 BUFF = 25
 USE_LEGEND = False
-time_window = 10.0    # override using model (t1 - t0)
 
 
 def load_model_spec(model_path):
     """Enhanced to include tspan parameters"""
-    global time_window
     data = toml.load(model_path)
     # Parse regular parameters
     raw_params = data.get("parameters", {})
@@ -63,11 +61,9 @@ def load_model_spec(model_path):
     tspan = data.get("tspan", {})
     # get time window toml from [tspan] section t0, t1
     t0 = tspan.get("t0", 0.0)
-    t1 = tspan.get("t1", time_window)
-    time_window = t1 - t0
+    t1 = tspan.get("t1", 10.0)
     parsed["t0"] = ("c_double", t0)
     parsed["t1"] = ("c_double", t1)  # This becomes controllable
-    # ... but `time_window`` is fixed!
     return parsed
 
 
@@ -124,7 +120,7 @@ def create_line_series_theme(color, theme_tag):
             dpg.add_theme_style(dpg.mvPlotStyleVar_LineWeight, 2, category=dpg.mvThemeCat_Plots)
 
 
-def add_single_variable_plot(parent, y_name, time_window, color):
+def add_single_variable_plot(parent, y_name, tspan, color):
     """Create a properly configured plot with specified color"""
     parent_width = dpg.get_item_width(parent)
     # Create unique theme for this series
@@ -139,17 +135,19 @@ def add_single_variable_plot(parent, y_name, time_window, color):
         series = dpg.add_line_series([], [], label=y_name, parent=y_axis, tag=f"series_{y_name}")
         # Bind theme ONLY to this specific series (not globally)
         dpg.bind_item_theme(series, theme_tag)
-        dpg.set_axis_limits(x_axis, 0, time_window)
+        dpg.set_axis_limits(x_axis, tspan[0], tspan[1])
         dpg.set_axis_limits(y_axis, -1, 1)  # Initial guess, will auto-scale
         return series, f"x_axis_{y_name}", f"y_axis_{y_name}"
 
 
 
-def update_plots(model_name, y_names, plot_data, time_window, plot_controller):
-    """Enhanced plot updating with throttling and better axis scaling"""
+def update_plots(model_name, y_names, plot_data, plot_ctrl):
+    """Enhanced plot updating with throttling and better axis scaling.
+    No explicit `tspan` here, we use whatever is in the CSV file 
+    from the julia solver."""
     # Check throttle
     current_time = time.time()
-    if current_time - plot_controller.last_plot_update < plot_controller.throttle_delay:
+    if current_time - plot_ctrl.last_plot_update < plot_ctrl.throttle_delay:
         return
     csv_path = f"models/{model_name}.csv"
     if not os.path.exists(csv_path):
@@ -160,8 +158,12 @@ def update_plots(model_name, y_names, plot_data, time_window, plot_controller):
             lines = [line.strip() for line in f.readlines()[1:] if line.strip()]
             if not lines:
                 return
+            # Also skip plot update if no new lines
+            if len(lines) == plot_ctrl.last_csvlines_len:
+                return  # nothing new → skip redraw
+            plot_ctrl.last_csvlines_len = len(lines)
             # Use last 1000 points but respect throttling
-            data = [line.split(',') for line in lines[-1000:]]
+            data = [line.split(',') for line in lines]
             t = [float(row[0]) for row in data]
             if not t:
                 return
@@ -173,19 +175,13 @@ def update_plots(model_name, y_names, plot_data, time_window, plot_controller):
                 # Update data series
                 dpg.set_value(series_tag, [t, y_values])
                 
-                # Enhanced X axis scaling with sliding window
+                # Enhanced X axis scaling
                 if len(t) > 1:
-                    latest_t = t[-1]
-                    
-                    if latest_t <= plot_controller.initial_x_window:
-                        # Still within initial window
-                        dpg.set_axis_limits(x_axis_tag, 0, plot_controller.initial_x_window)
-                    else:
-                        # Sliding window mode
-                        window_start = latest_t - plot_controller.initial_x_window
-                        window_end = window_start + time_window
-                        dpg.set_axis_limits(x_axis_tag, window_start, window_end)
-                
+                    # margin = 0.01 * (t[-1] - t[0]) if len(t) > 1 else 1.0
+                    # dpg.set_axis_limits(x_axis_tag, t[0], t[-1] + margin)
+                    margin = 0.01 * (t[-1] - t[0]) 
+                    dpg.set_axis_limits(x_axis_tag, 0.0, t[-1] + margin)
+    
                 # Auto-scale Y axis with better padding
                 if y_values:
                     y_min = min(y_values)
@@ -196,7 +192,7 @@ def update_plots(model_name, y_names, plot_data, time_window, plot_controller):
                         padding = 0.1
                     dpg.set_axis_limits(y_axis_tag, y_min - padding, y_max + padding)
         
-        plot_controller.last_plot_update = current_time
+        plot_ctrl.last_plot_update = current_time
                     
     except Exception as e:
         print(f"Plot update error: {e}")
@@ -204,8 +200,9 @@ def update_plots(model_name, y_names, plot_data, time_window, plot_controller):
 
 class PlotController:
     '''Optional, but useful for inspecting transients perhaps.'''
-    def __init__(self):
-        self.initial_x_window = 10.0  # Initial 10-second window
+    def __init__(self, param_dict):
+        self.last_csvlines_len = 0
+        self.tspan = [param_dict['t0'][1], param_dict['t1'][1]]
         self.throttle_delay = 0.0  # No throttle by default
         self.last_plot_update = 0.0
         
@@ -507,24 +504,21 @@ class SharedSimState:
 
 # --------------------- Enhanced DearPyGui GUI ------------------------
 def build_gui(model_name, param_dict, shared: SharedSimState):
-    global time_window
     dpg.create_context()
     dpg.create_viewport(title=f"pukahaPai | {model_name}", width=1200, height=600)
 
-    # Initialize plot controller
-    plot_controller = PlotController()
-    
     # Get variable names and generate colors
     y_names, _ = extract_variable_names(model_path)
     colors = generate_colors(len(y_names))
     plot_data = {}
-    
-    # Create plot window
+
+    # Initialize plot controller
+    plot_ctrl = PlotController(param_dict)
     plot_window = dpg.add_window(label="ODE Solution Plots", width=1000, height=600, pos=(210,0), tag="plot_window")
     
-    # Create plots with distinct colors
     for i, y_name in enumerate(y_names):
-        plot_data[y_name] = add_single_variable_plot(plot_window, y_name, time_window, colors[i])
+        plot_data[y_name] = add_single_variable_plot(plot_window, y_name, 
+                                                     plot_ctrl.tspan, colors[i])
 
     # Control panel window
     with dpg.window(label=f"pukahaPai | {model_name}", width=200, height=600, tag="main_window"):
@@ -555,14 +549,14 @@ def build_gui(model_name, param_dict, shared: SharedSimState):
 
         # Plot control section
         dpg.add_separator()
-        dpg.add_text("Plot Controls")
+        #dpg.add_text("Plot throttle (ms)")
         
         def throttle_callback(sender, value):
-            plot_controller.set_throttle(value)
+            plot_ctrl.set_throttle(value)
             print(f"Plot throttle set to {value}ms")
         
         dpg.add_slider_int(
-            label="Plot Throttle (ms)",
+            label="(ms)",
             default_value=0,
             min_value=0,
             max_value=1000,
@@ -658,13 +652,11 @@ def build_gui(model_name, param_dict, shared: SharedSimState):
     def render_callback():
         nonlocal last_update_time
         current_time = time.time()
-        
         refresh_state()  # Always update GUI state
-        
         # Plot updates are now throttled independently
         if current_time - last_update_time >= update_interval:
-            if shared.get_state() == 'r':
-                update_plots(model_name, y_names, plot_data, time_window, plot_controller)
+            if shared.get_state() == 'r' and shared._monitor_thread.is_alive():
+                update_plots(model_name, y_names, plot_data, plot_ctrl)
             last_update_time = current_time
 
     # Main loop
@@ -683,6 +675,8 @@ def build_gui(model_name, param_dict, shared: SharedSimState):
 model_name, model_path = get_model_path()
 
 param_dict = load_model_spec(model_path)
+# print(f"{param_dict = }")
+# quit()
 shared = SharedSimState(param_dict, model_name)
 try:
     build_gui(model_name, param_dict, shared)

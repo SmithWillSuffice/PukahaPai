@@ -145,6 +145,21 @@ function solve_ode()
     try
         sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
         println("Simulation completed successfully")
+
+        # Write final point if needed
+        try
+            t_final = sol.t[end]
+            y_final = sol.u[end]
+            write(outfile, string(t_final))
+            for val in y_final
+                write(outfile, "," * string(val))
+            end
+            write(outfile, "\n")
+            flush(outfile)
+        catch e
+            println("Warning: Failed to write final CSV row: ", e)
+        end
+
     catch e
         println("Solver error: ", e)
         write_shared_state('e')  # Error state

@@ -3,9 +3,28 @@
 A dearpygui app for interactiveloy running (simple) ODE system solvers. The aim
 is the graduate up to the complexity of an MMT (sectoral balance) Minsky ODES.
 
-**Manifest:**  The idea is a real economy never collapses except for all out 
-war defeat. We are not going to model Geopolitics! Our macroeocnomic models 
-are for policy analysis in times of relative political peace only.
+## Manifest
+
+**Concept I.**  
+The idea is a real economy never collapses except for all 
+out war defeat. We are not going to model Geopolitics! Our macroeocnomic 
+models are for policy analysis
+in times of relative political peace only.
+
+
+**Concept II.**   
+For time series I decided to explicitly and implicitly (yeah both) presume one
+should **never care** about long time runs, because any decent nonlinear ODE
+will very rapidly depart from any useful real world predictions. This
+especially true in Macroeoncomics, which is similar to Weather modelling. _We
+only ever care about a short run forecast!_ 
+
+
+**Concept III.**   
+No geopoltics. The model is for (relative)
+peace time policy analsysis only. 
+
+---
 
 See the [TODO](#todo) section for recent development tasks.
 
@@ -104,15 +123,38 @@ nasty Phillips Curve or other badly programmed response function in the ODES.
 Macroeocnomics models are our main concern. (What else is there that is important
 ... that is not climate and ecology related?) 
 
-***STrategy:** Do not write unstable functions!
+***Strategy:** Do not write unstable functions!
 
 So we want MMT models that are inherently well-behaved. This may mean some added
 runtime. But the idea is to actually use real life stabilizers, built-in. The
-idea is a real economy never collapses except for all out war defeat. We are
+idea is a real economy never collapses except for all out war defeat. 
+Recall [**Manifest Concept III**](#manifest): we are
 not going to model Geopolitics! 
 
+### Short Time Periods
 
-**Our Manisfest:** No geopoltics. The model is for (relative) peace time policy analsysis only. 
+Recall [**Manifest Concept II**](#manifest). This implies we can keep the
+plotting simple. I had a window scroll version in mind, but no more! We should
+always simply plot from `t=t0` to the last time in the CSV data.
+
+If this compresses the plot display horribly then the user is abusing the 
+model. 
+
+If they cannot see a long run instability this way, then "to bad!" You can use
+the cmdl versionof the Julia solver to run long times. But remember, long run
+stability is not really of much interest, because in Macroeconomics the
+poltiical decisions get changed every few years, and with passage of parliament
+Bills sometimes within months, and so the model become INVALID after about 6 to
+12 months.
+
+That said, long time runs can be useful for long term **policy analysis** —
+which is purely theoretical. An academic question, _"what if we ran the system like this for a long time?"_
+
+To visualize such long run simulations I recommend **Save Model** which is the
+button that runs the plotly script to make the html report. In a browser you can
+windown the time series. You can make your own python script to animate the whole thing
+if you care.
+
 
 ### Solver Callbacks
 
@@ -298,7 +340,11 @@ julia models/lorenz_attractor_cmdl.jl
 **Short List:**
 * Get basic pendulum example working with GUI.
    - [✔] GUI controller + Julia Solver.
-   - [] Add a button to "Save Model" which presently should just run the plotly html plot script. Later we could add some other form of archiving, like saving the Julia script pair plus CSV to a subsubfolder?
+   - [] Get an init `time_window` fixed but allow user to start the simulation
+     with a new `t1`, so we see the window "move" or scroll.
+   - [] Add a button to "Save Model" which presently should just run the plotly
+     html plot script. Later we could add some other form of archiving, like
+     saving the Julia script pair plus CSV to a subsubfolder?
 
 * Test the Lorenz Attractor
    - [] Time series plotting ok.
