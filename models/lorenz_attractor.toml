@@ -1,0 +1,34 @@
+model_name = "lorenz_attractor"
+
+[parameters]
+sigma = 10.0
+rho = 28.0
+beta = 2.6
+
+[variables]
+names = ["x", "y", "z"]
+
+[initial_conditions]
+x = 1.0
+y = 0.0
+z = 0.0
+
+[equations]
+x = "sigma * (y - x)"
+y = "x * (rho - z) - y"
+z = "x * y - beta * z"
+
+[tspan]
+t0 = 0.0
+t1 = 40.0
+
+[solver]
+dt = 0.01
+method = "Tsit5"
+
+[plots]
+# Leave out time_series to include all by default
+
+[[plots.phase]]
+vars = ["x", "y", "z"]
+aspect = [1.0, 1.0, 1.0]

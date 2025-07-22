@@ -1,0 +1,40 @@
+model_name = "pendulum"
+
+[parameters]
+mass = 1.0
+length = 1.0
+damping = 0.1
+g = 9.81
+
+[variables]
+names = ["theta", "omega"]
+
+[initial_conditions]
+theta = 0.785398
+omega = 0.0
+
+[equations]
+# dy/dt = f(y, t)
+# Use Julia-like syntax here
+theta = "omega"
+omega = "-damping * omega - (g / length) * sin(theta)"
+
+[tspan]
+t0 = 0.0
+t1 = 10.0
+
+[solver]
+dt = 0.01
+method = "Tsit5"  # or "DP5", "RK4", "Rodas5", etc.
+
+[plots]
+
+# Optional: restrict which time series to show (omit to show all)
+time_series = ["theta", "omega"]
+
+# Optional: phase plots, list of variable pairs or triples
+# Each entry is a list of 2 or 3 variable names
+[[plots.phase]]
+vars = ["theta", "omega"]      # 2D plot
+aspect = [1.0, 1.0]        # Optional: scaling for x:y
+

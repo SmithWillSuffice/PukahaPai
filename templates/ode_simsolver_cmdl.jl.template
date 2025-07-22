@@ -1,0 +1,60 @@
+# -*- coding: utf-8 -*-
+# {{model_name}}_cmdl.jl - Command-line version
+
+using DifferentialEquations
+
+# Parameters
+{% for name, value in parameters.items() %}
+const {{name}} = {{value}}
+{% endfor %}
+
+# Time parameters
+const t0 = {{t0}}
+const t1 = {{t1}}
+const dt = {{dt}}
+
+function ode!(du, u, p, t)
+{% for name in variable_names %}
+    {{name}} = u[{{loop.index}}]
+{% endfor %}
+
+{% for name, expr in equations.items() %}
+    du[{{loop.index}}] = {{expr}}
+{% endfor %}
+end
+
+# Initial conditions
+u0 = [
+{% for name in variable_names %}
+    {{initial_conditions[name]}}{{ "," if not loop.last }}
+{% endfor %}
+]
+
+# Problem setup
+tspan = (t0, t1)
+prob = ODEProblem(ode!, u0, tspan)
+
+# Output file
+outfile = open("models/{{model_name}}.csv", "w")
+write(outfile, "t,{{ variable_names | join(',') }}\n")
+
+# Callback for writing results
+step_callback = function (integrator)
+    t = integrator.t
+    y = integrator.u
+    write(outfile, string(t))
+{% for i in range(variable_names | length) %}
+    write(outfile, "," * string(y[{{i + 1}}]))
+{% endfor %}
+    write(outfile, "\n")
+    flush(outfile)
+    return false
+end
+
+# Solve the ODE
+cb = DiscreteCallback((u,t,integrator)->true, step_callback)
+sol = solve(prob, {{method}}(), dt=dt, adaptive=false, callback=cb)
+
+# Cleanup
+close(outfile)
+println("Simulation completed successfully")

@@ -1,0 +1,321 @@
+# -*- coding: utf-8 -*-
+# pendulum_gui.jl - Fixed IPC and error handling
+using DifferentialEquations
+import Base.Libc
+using Mmap
+
+# Auto-generated struct for shared memory interop
+struct pendulum_Shared
+    state::UInt8
+    t0::Float64
+    t1::Float64
+    mass::Float64
+    length::Float64
+    damping::Float64
+    g::Float64
+end
+
+# Global variables for cleanup
+const SHARED_MEMORY = Ref{Union{Nothing, Vector{UInt8}}}(nothing)
+const SHARED_FD = Ref{Union{Nothing, IO}}(nothing)
+
+function cleanup_shared_memory()
+    """Safe cleanup of shared memory resources"""
+    try
+        if SHARED_MEMORY[] !== nothing
+            finalize(SHARED_MEMORY[])
+            SHARED_MEMORY[] = nothing
+        end
+        if SHARED_FD[] !== nothing
+            close(SHARED_FD[])
+            SHARED_FD[] = nothing
+        end
+    catch e
+        println("Cleanup warning: ", e)
+    end
+end
+
+function open_shared_pendulum()
+    """Open shared memory with improved error handling"""
+    shmpath = "/dev/shm/pukaha_shared"
+    sz = sizeof(pendulum_Shared)
+    
+    # Verify shared memory exists and has correct size
+    if !isfile(shmpath)
+        error("Shared memory file not found - is the GUI controller running?")
+    elseif filesize(shmpath) != sz
+        error("Shared memory size mismatch (expected $sz, got $(filesize(shmpath))) - please restart the GUI")
+    end
+    
+    # Clean up any existing resources first
+    cleanup_shared_memory()
+    
+    # Open with proper error handling
+    try
+        fd = open(shmpath, "r+")
+        SHARED_FD[] = fd
+        arr = Mmap.mmap(fd, Vector{UInt8}, sz)
+        SHARED_MEMORY[] = arr
+        return arr, Ptr{pendulum_Shared}(pointer(arr))
+    catch e
+        cleanup_shared_memory()
+        rethrow(e)
+    end
+end
+
+function read_shared_params()
+    """Thread-safe parameter reading"""
+    try
+        arr, ptr = open_shared_pendulum()
+        return unsafe_load(ptr)
+    catch e
+        println("Error reading shared parameters: ", e)
+        rethrow(e)
+    end
+end
+
+function write_shared_state(new_state::Char)
+    """Thread-safe state writing with error handling"""
+    try
+        arr, ptr = open_shared_pendulum()
+        unsafe_store!(Ptr{UInt8}(pointer(arr)), UInt8(new_state))
+        println("State updated to: ", new_state)
+    catch e
+        println("Error writing shared state: ", e)
+        # Don't rethrow - state updates shouldn't crash the solver
+    end
+end
+
+function check_gui_state()
+    """Thread-safe state checking with fallback"""
+    try
+        arr, ptr = open_shared_pendulum()
+        state_byte = unsafe_load(Ptr{UInt8}(pointer(arr)))
+        return Char(state_byte)
+    catch e
+        println("Error checking GUI state: ", e)
+        return 'i'  # Default to idle on error
+    end
+end
+
+function solve_ode()
+    """Main ODE solver with improved error handling"""
+    println("Starting ODE solution...")
+    
+    # Read parameters from shared memory
+    local params
+    try
+        params = read_shared_params()
+        println("Parameters loaded: mass=$(params.mass), length=$(params.length), damping=$(params.damping)")
+    catch e
+        println("Failed to read parameters: ", e)
+        write_shared_state('e')
+        return false
+    end
+    
+    csv_write_counter = 0
+    csv_write_freq = 5  # Write every 5 steps
+    local outfile
+    
+    function ode!(du, u, p, t)
+        theta = u[1]
+        omega = u[2]
+        
+        # Extract parameters
+        mass = params.mass
+        length = params.length
+        damping = params.damping
+        g = params.g
+        
+        du[1] = omega
+        du[2] = -damping * omega - (g / length) * sin(theta)
+    end
+    
+    # Initial conditions
+    u0 = [0.785398, 0.0]  # 45 degrees, no initial velocity
+    tspan = (params.t0, params.t1)
+    dt = 0.01
+    
+    try
+        # Open output file
+        outfile = open("models/pendulum.csv", "w")
+        write(outfile, "t,theta,omega\\n")
+        println("Output file opened: models/pendulum.csv")
+        
+        # Create problem
+        prob = ODEProblem(ode!, u0, tspan)
+        
+        # Enhanced step callback with better error handling
+        step_callback = function (integrator)
+            try
+                state = check_gui_state()
+                
+                if state == 'q'  # Quit signal
+                    println("Received quit signal from GUI")
+                    terminate!(integrator)
+                    return true
+                elseif state == 'p'  # Pause signal
+                    # Simple pause implementation - just slow down
+                    sleep(0.01)
+                    return false
+                end
+                
+                # Write data to file periodically
+                csv_write_counter += 1
+                if csv_write_counter % csv_write_freq == 0
+                    t = integrator.t
+                    y = integrator.u
+                    write(outfile, string(t))
+                    for val in y
+                        write(outfile, "," * string(val))
+                    end
+                    write(outfile, "\\n")
+                    flush(outfile)
+                end
+                
+                return false
+            catch e
+                println("Callback error: ", e)
+                terminate!(integrator)
+                return true
+            end
+        end
+        
+        # Create callback
+        cb = DiscreteCallback((u,t,integrator)->true, step_callback)
+        
+        # Solve the ODE
+        println("Starting integration...")
+        sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
+        
+        if sol.retcode == :Terminated
+            println("Simulation terminated by user request")
+        else
+            println("Simulation completed successfully with return code: ", sol.retcode)
+        end
+        
+        return true
+        
+    catch e
+        println("Solver error: ", e)
+        write_shared_state('e')
+        return false
+    finally
+        # Always close the output file
+        try
+            if @isdefined(outfile)
+                close(outfile)
+                println("Output file closed")
+            end
+        catch e
+            println("Error closing output file: ", e)
+        end
+    end
+end
+
+function setup_signal_handlers()
+    """Set up proper signal handling for graceful shutdown"""
+    # Handle SIGTERM (signal 15) gracefully
+    Base.exit_on_sigint(false)
+    
+    # Custom signal handler
+    function signal_handler(sig::Cint)
+        println("Received signal ", sig)
+        if sig == Base.SIGTERM || sig == Base.SIGINT
+            write_shared_state('q')
+            println("Setting quit state due to signal")
+        end
+    end
+    
+    # Register handlers
+    ccall(:jl_install_sigint_handler, Cvoid, ())
+    # Note: SIGTERM handling is more complex in Julia, so we rely on the main loop
+end
+
+function main()
+    """Main execution with robust error handling and signal management"""
+    println("Julia solver started for pendulum model")
+    println("Process ID: ", getpid())
+    
+    # Set up signal handling
+    setup_signal_handlers()
+    
+    # Main execution loop with better error handling
+    exit_requested = false
+    solver_running = false
+    
+    try
+        while !exit_requested
+            try
+                state = check_gui_state()
+                
+                if state == 'r' && !solver_running
+                    println("Starting simulation (state = 'r')...")
+                    solver_running = true
+                    
+                    success = solve_ode()
+                    
+                    solver_running = false
+                    if success
+                        write_shared_state('s')  # Completed normally
+                        println("Simulation completed, state set to 's'")
+                    else
+                        write_shared_state('e')  # Error occurred
+                        println("Simulation failed, state set to 'e'")
+                    end
+                    
+                elseif state == 'q'
+                    println("Received quit signal (state = 'q')")
+                    exit_requested = true
+                    break
+                    
+                elseif state == 'e'
+                    println("Error state detected, resetting to idle")
+                    write_shared_state('i')
+                end
+                
+            catch e
+                println("Main loop error: ", e)
+                write_shared_state('e')
+                solver_running = false
+                # Don't exit on individual errors, just log and continue
+            end
+            
+            # Small sleep to prevent busy waiting
+            sleep(0.1)
+        end
+        
+    catch e
+        println("Fatal error in main loop: ", e)
+        write_shared_state('e')
+    finally
+        # Cleanup
+        println("Julia solver shutting down...")
+        cleanup_shared_memory()
+        
+        try
+            write_shared_state('s')  # Final state
+            println("Final state set to 's'")
+        catch e
+            println("Could not set final state: ", e)
+        end
+        
+        println("Julia solver cleanly stopped")
+    end
+end
+
+# Immediate execution with error handling
+try
+    main()
+catch e
+    println("Startup error: ", e)
+    # Try to signal error state if possible
+    try
+        write_shared_state('e')
+    catch
+        # Ignore secondary errors during error handling
+    end
+finally
+    cleanup_shared_memory()
+    println("Julia process exiting")
+end
