@@ -46,6 +46,5 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ## Copyright
 
-Copyright (C) [YEAR] [YOUR NAME OR ENTITY]
-
-All rights reserved.
+| Copyright (C) 2025 Bijou M. Smith
+| All rights reserved.
