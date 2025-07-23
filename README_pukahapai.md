@@ -65,10 +65,12 @@ GovSpend and or Tax rate adjustments with a lag, in response to rising GovDebt p
 
 ### Simulation Use Case Studies
 
-1. Monte Carlo Studies for NZ — for forecasting. What will unemployment be? What it were MMT instead?
+1. Monte Carlo Studies for NZ — for forecasting. What will unemployment be? What if it were MMT instead?
 2. Policy Games — run batch simulations, with designed policy response (a "regime" of government).
 3. Intearctive Response Game — use adaptive responses. Thus more varied. The user tries a Deficit Target policy, but then changes to Inflation Target, then to Employment Target.
 
+
+---
 
 See the [TODO](#todo) section for recent development tasks.
 
@@ -377,12 +379,13 @@ julia models/lorenz_attractor_cmdl.jl
 [] = not yet done.  
 ✔ = crudely working, no obvious bugs.  
 ✔✔ = satisfying and somewhat tested on examples.  
-✔✔✔ = rigorously tested.
+✔✔✔ = rigorously tested (so why still on the TODO list? — because I'm not
+totally trusting!).
 
 **Short List:**
 * Get basic pendulum example working with GUI.
    - [✔] GUI controller + Julia Solver.
-   - [] Add a button to "Save Model" which presently should just run the plotly
+   - [✔] Add a button to "Save Model" which presently should just run the plotly
      html plot script. Later we could add some other form of archiving, like
      saving the Julia script pair plus CSV to a subsubfolder?
 
@@ -400,4 +403,5 @@ Next: also see the [MMT Considertations section](#mmt-macroeconomics-considerati
 
 
 **Long Wishlist:**
-* Generate full reports? Academic paper-ready.  Should include model summary in markdown/katex and even stability analysis reportage.
+* Generate full reports? Academic paper-ready.  Should include model summary in
+  markdown/katex and even stability analysis reportage.

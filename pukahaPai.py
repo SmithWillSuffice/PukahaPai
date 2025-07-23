@@ -638,12 +638,19 @@ def build_gui(model_name, param_dict, shared: SharedSimState):
             finally:
                 refresh_state()
                 print("Stop procedure completed")
+        
+        def save_model():
+            cmd = f'./plots4model.py {model_name}'
+            print(f"Saving model {model_name} HTML to './modles/'")
+            subprocess.run(cmd, shell=True)
 
         # Control buttons
         dpg.add_separator()
         dpg.add_button(label="Start", tag="start_button", callback=start_simulation, width=80)
         dpg.add_button(label="Pause", tag="pause_button", callback=pause_simulation, width=80)
         dpg.add_button(label="Stop", tag="stop_button", callback=stop_simulation, width=80)
+        dpg.add_separator()
+        dpg.add_button(label="Save html", tag="save_button", callback=save_model, width=90)
 
     # Time tracking for main GUI update loop
     last_update_time = 0
