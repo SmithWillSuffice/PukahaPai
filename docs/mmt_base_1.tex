@@ -1,0 +1,51 @@
+\documentclass[12pt]{extarticle}
+\usepackage{amsmath}
+\usepackage[margin=1in]{geometry}
+\author{Bijou M. Smith}
+\title{ODE Model --- mmt base 1 }
+\begin{document}
+\maketitle
+\begin{table}[h]
+\centering
+\caption{Parameters}
+\begin{tabular}{lll}
+Name & Symbol & Value \\ \hline  &  &  \\[-10pt] 
+K & $K$ & 100.0 \\
+nu & $\nu$ & 2.5 \\
+alpha & $\alpha$ & 0.02 \\
+N & $N$ & 100.0 \\
+J & $J$ & 0.5 \\
+jg\_wage & $w_j$ & 0.9 \\
+phi & $\phi$ & 1.0 \\
+gamma & $\gamma$ & 0.05 \\
+varphi & $\varphi$ & 1.0 \\
+u\_init & $u_0$ & 0.8 \\
+P\_init & $P_0$ & 1.0 \\
+phi0 & $\phi_0$ & 0.03
+\end{tabular}
+\end{table}
+\begin{table}[h]
+\centering
+\caption{Initial Conditions}
+\begin{tabular}{lll}
+Name & Symbol & Value \\ \hline  &  &  \\[-10pt] 
+Pi & $\Pi$ & 1.0 \\
+Y & $Y$ & 50.0 \\
+u & $u$ & 0.6 \\
+lambda & $\lambda$ & 0.9
+\end{tabular}
+\end{table}
+\section*{Auxiliary Equations}
+\begin{align*}
+Y_j &= \varphi  \cdot (1 - \lambda) \cdot N \cdot J \\
+Y_r &= K / \nu \\
+\Phi &= \phi_0  \cdot (\lambda / (1 - \lambda))
+\end{align*}
+\section*{ODE Equations}
+\begin{align*}
+\frac{d\lambda}{dt} &= \lambda  \cdot (\gamma  \cdot (1 - \omega) - \alpha) \\
+\frac{d\omega}{dt} &= \omega  \cdot (\Phi - \alpha) \\
+\frac{du}{dt} &= u  \cdot (\Phi + (\omega / \lambda) \cdot \frac{d\lambda}{dt} + (1/P) \cdot \frac{dP}{dt} - \alpha) \\
+\frac{dP}{dt} &= \Phi + 0.01  \cdot (\omega - w_j)
+\end{align*}
+\end{document}

@@ -27,7 +27,12 @@ peace time policy analsysis only.
 
 ## MMT Macroeconomics Considerations
 
-I have not yet settled on the modelling specifics. 
+Note to elf: the book I was writing `Monetary_economic_models.pdf` has some
+Minsky ODES models and discussions. I have not yet settled on the PukahaPai
+modelling specifics. Price, Phillips Curve, and other response functions will be
+different. We wan the MMT Phillips Curve to involve deliberate government policy
+(inferred from prevailing ideology, or optionally using the MMT BAse Case which
+is the JG Buffer, which flattens the Phillips Curve..
 
 **Features to implement:**
 1. Stock-Flow consistent, by using Godley Tables.
