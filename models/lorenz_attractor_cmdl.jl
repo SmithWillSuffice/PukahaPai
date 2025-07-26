@@ -17,22 +17,28 @@ const t0 = 0.0
 const t1 = 40.0
 const dt = 0.01
 
+
+# This version does not need shared memory parameters, since
+# it is for the cmdl version.
+
 function ode!(du, u, p, t)
-
-    x = u[1]
-
-    y = u[2]
-
-    z = u[3]
-
-
-
-    du[1] = sigma * (y - x)
-
-    du[2] = x * (rho - z) - y
-
-    du[3] = x * y - beta * z
-
+    
+            x = u[1]
+    
+            y = u[2]
+    
+            z = u[3]
+    
+        # Auxiliary equations
+    
+        # ODEs
+    
+        du[1] = sigma * (y - x)
+    
+        du[2] = x * (rho - z) - y
+    
+        du[3] = x * y - beta * z
+    
 end
 
 # Initial conditions

@@ -17,9 +17,9 @@ z = 0.0
 # none for this model
 
 [equations.ode]
-x = "sigma * (y - x)"
-y = "x * (rho - z) - y"
-z = "x * y - beta * z"
+f_x = "sigma * (y - x)"
+f_y = "x * (rho - z) - y"
+f_z = "x * y - beta * z"
 
 [tspan]
 t0 = 0.0
@@ -35,3 +35,4 @@ method = "Tsit5"
 [[plots.phase]]
 vars = ["x", "y", "z"]
 aspect = [1.0, 1.0, 1.0]
+
