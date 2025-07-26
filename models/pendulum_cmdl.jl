@@ -19,18 +19,24 @@ const t0 = 0.0
 const t1 = 100.0
 const dt = 0.01
 
+
+# This version does not need shared memory parameters, since
+# it is for the cmdl version.
+
 function ode!(du, u, p, t)
-
-    theta = u[1]
-
-    omega = u[2]
-
-
-
-    du[1] = omega
-
-    du[2] = -damping * omega - (g / length) * sin(theta)
-
+    
+            theta = u[1]
+    
+            omega = u[2]
+    
+        # Auxiliary equations
+    
+        # ODEs
+    
+        du[1] = omega
+    
+        du[2] = -damping * omega - (g / length) * sin(theta)
+    
 end
 
 # Initial conditions

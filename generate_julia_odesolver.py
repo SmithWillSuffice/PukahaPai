@@ -136,8 +136,11 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = True
 
     parameters = config.get("parameters", {})
     variable_names = config["variables"]["names"]
-    init_vals = config["initial_conditions"]
-    equations = config["equations"]
+    init_vals = config["initial_conditions"]    
+    ode_equations = config.get("equations", {}).get("ode", {})
+    auxiliary_equations = config.get("equations", {}).get("auxiliary", {})
+
+
     t0 = config["tspan"]["t0"]
     t1 = config["tspan"]["t1"]
     dt = config["solver"]["dt"]
@@ -148,14 +151,27 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = True
         "parameters": parameters,
         "variable_names": variable_names,
         "initial_conditions": init_vals,
-        "equations": equations,
+        "ode_equations": ode_equations,
         "t0": t0,
         "t1": t1,
         "dt": dt,
         "method": method,
         "variable_count": len(variable_names),
     }
-    
+    if auxiliary_equations is not None:
+        context["auxiliary_equations"] = auxiliary_equations
+
+    # For index consistency:
+    equation_ordered = []
+    for i, name in enumerate(variable_names):
+        eq_name = f"f_{name}"
+        if eq_name in ode_equations:
+            equation_ordered.append((eq_name, ode_equations[eq_name]))
+        else:
+            raise ValueError(f"Missing ODE for variable: {name}")
+    context["ode_equations"] = {k: v for k, v in equation_ordered}
+
+
     # Only include struct code for GUI version
     if gui_version:
         context["julia_struct_code"] = generate_julia_struct(model_name, parameters)

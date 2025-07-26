@@ -13,14 +13,24 @@ const t0 = {{t0}}
 const t1 = {{t1}}
 const dt = {{dt}}
 
-function ode!(du, u, p, t)
-{% for name in variable_names %}
-    {{name}} = u[{{loop.index}}]
-{% endfor %}
 
-{% for name, expr in equations.items() %}
-    du[{{loop.index}}] = {{expr}}
-{% endfor %}
+# This version does not need shared memory parameters, since
+# it is for the cmdl version.
+
+function ode!(du, u, p, t)
+    {% for name in variable_names %}
+            {{name}} = u[{{loop.index}}]
+    {% endfor %}
+        # Auxiliary equations
+    {% if auxiliary_equations %}
+    {% for name, expr in auxiliary_equations.items() %}
+        {{name}} = {{expr}}
+    {% endfor %}
+    {% endif %}
+        # ODEs
+    {% for name, expr in ode_equations.items() %}
+        du[{{ loop.index }}] = {{ expr }}
+    {% endfor %}
 end
 
 # Initial conditions

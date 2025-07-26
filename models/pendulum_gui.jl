@@ -75,34 +75,41 @@ function solve_ode()
     csv_write_freq = 5  # Write every 5 steps
     
     function ode!(du, u, p, t)
-
+    
         theta = u[1]
-
+    
         omega = u[2]
+    
 
         # Extract parameters from shared memory struct
+    
+            mass = params.mass
+    
+            length = params.length
+    
+            damping = params.damping
+    
+            g = params.g
+    
 
-        mass = params.mass
+        # Auxiliary equations
+    
 
-        length = params.length
-
-        damping = params.damping
-
-        g = params.g
-
-
+        # ODEs
+    
         du[1] = omega
-
+    
         du[2] = -damping * omega - (g / length) * sin(theta)
+    
 
-    end
+end
     
     u0 = [
-
-        0.785398,
-
-        0.0
-
+    
+            0.785398,
+    
+            0.0
+    
     ]
     
     tspan = (params.t0, params.t1)

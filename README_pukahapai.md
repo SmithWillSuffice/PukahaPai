@@ -388,6 +388,11 @@ julia models/lorenz_attractor_cmdl.jl
 totally trusting!).
 
 **Short List:**
+* Unit Tests:
+   - The julia code generator needs to be tested each new model we build, at least 
+   to make backwards compatible with `pendulum.toml` and `lorenz_attractor.toml`.
+   It is a pain to repeat this every update, so this needs automation. Run 10 time 
+   steps and check the CSV is as expected within float uncertainty. 
 * Get basic pendulum example working with GUI.
    - [✔] GUI controller + Julia Solver.
    - [✔] Add a button to "Save Model" which presently should just run the plotly

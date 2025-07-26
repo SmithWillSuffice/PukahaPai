@@ -13,7 +13,10 @@ x = 1.0
 y = 0.0
 z = 0.0
 
-[equations]
+[equations.auxiliary]
+# none for this model
+
+[equations.ode]
 x = "sigma * (y - x)"
 y = "x * (rho - z) - y"
 z = "x * y - beta * z"

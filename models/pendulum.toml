@@ -13,11 +13,14 @@ names = ["theta", "omega"]
 theta = 0.785398
 omega = 0.0
 
-[equations]
+[equations.auxiliary]
+# none for this model
+
+[equations.ode]
 # dy/dt = f(y, t)
 # Use Julia-like syntax here
-theta = "omega"
-omega = "-damping * omega - (g / length) * sin(theta)"
+f_theta = "omega"
+f_omega = "-damping * omega - (g / length) * sin(theta)"
 
 [tspan]
 t0 = 0.0
