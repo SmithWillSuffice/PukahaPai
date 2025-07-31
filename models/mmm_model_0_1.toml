@@ -1,0 +1,70 @@
+model_name = "mmm_model_0_1"
+# Closed circuit model, no price ODE, no debt.
+# K, N, A are decoupled --- can be derived as f(t) in post-processing.
+
+[parameters]
+N0 = 100.0      # Total labor force t=0
+K0 = 100.0     # Total capital t=0
+c_u = 0.9      # wage share response to wage share level
+nu = 2.5       # Capital-output ratio (Y = K / nu)
+alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
+beta = 0.01     # population growth rate
+id = 0.03      # Bank spread above govt rate
+monopoly = 0.2   # Markup percentage on firm costs
+s = 0.2          # Savings desires
+Phi_d = 0.05       # Phillips multiplier
+Phi_c = 1.0        # Phillips offset
+gamma_p = 2.0      # Phillips exponent
+deprec = 0.05     # Capital depreciation constant
+# Investment response parameters: power law
+ai = 0.05
+bi = 0.05
+ci = 1.75
+di = 0.0
+gamma_i = 2.0  # Investment exponent
+
+[variables]
+names = ["P", "D", "u", "lambda"]
+
+[initial_conditions]
+P = 1.0
+D = 50.0
+u = 0.6
+lambda = 0.9
+
+[equations.auxiliary]
+A = "A0 * exp(alpha * t)"
+N = "N0 * exp(beta * t)"
+Yr = "lambda * A * N"
+Y = "Y * P"
+K = "nu * Y"    # not used?
+# Main Response Functions
+# Phillips curve
+Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
+# Caipital grow model
+Gamma = "(1 - u)/nu - deprec"
+# Profit equation - use nominal Y
+#Pi = "Y - w*L - ib * D"
+Pi = "Y - u*A*L - ib * D"
+pi = "Pi/K"
+# Investment curve
+Inv = "ai / (bi + ci * pi)^gamma_i - di"
+
+[equations.ode]
+# Price is cost + markup
+f_P = "tau_P * (u/(1 - monopoly) - P)"
+# Debt is investment less Profit
+f_D = "Inv - Pi"
+# Wage increases if labor market tight (small Phi)
+f_u = "u * (Phi - c_u)"       
+# Adjust employment rate toward output-labor ratio
+f_lambda = "lambda * ( Gamma - alpha - beta )"  
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+[solver]
+dt = 0.1
+method = "Tsit5"
+

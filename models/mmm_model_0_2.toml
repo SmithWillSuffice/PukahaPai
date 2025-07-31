@@ -1,0 +1,76 @@
+model_name = "mmm_model_0_2"
+# Closed circuit model, no price ODE, no debt.
+# K, N, A are decoupled --- can be derived as f(t) in post-processing.
+
+[parameters]
+N0 = 100.0      # Total labor force t=0
+K0 = 100.0     # Total capital t=0
+cG = 0.3       # Government spending factor or 'output share'
+varpi = 0.1    # wage share response to employment
+nu = 2.5       # Capital-output ratio (Y = K / nu)
+alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
+beta = 0.01     # population growth rate
+iG = 0.03       # Gov policy rate
+rT = 0.3        # effective equivalent flat tax rate
+monopoly = 0.2   # Markup percentage on firm costs
+s = 0.2          # Savings desires
+Phi_d = 0.05       # Phillips multiplier
+Phi_c = 1.0        # Phillips offset
+gamma_p = 2.0      # Phillips exponent
+deprec = 0.05     # Capital depreciation constant
+# Investment response parameters: power law
+ai = 0.05
+bi = 0.05
+ci = 1.75
+di = 0.0
+gamma_i = 2.0  # Investment exponent
+
+[variables]
+names = ["P", "D", "u", "lambda"]
+
+[initial_conditions]
+P = 1.0
+D = 50.0
+lambda = 0.9
+u = 0.6
+
+[equations.auxiliary]
+A = "A0 * exp(alpha * t)"
+N = "N0 * exp(beta * t)"
+Yr = "lambda * A * N"
+Y = "Y * P"
+K = "nu * Y"    # not used?
+# Fiscal functions
+G = "cG * Y"
+T = "rT * Y"
+# Main Response Functions
+# Phillips curve
+Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
+# Caipital grow model
+Gamma = "(1 - u)/nu - deprec"
+# Profit equation - use nominal Y
+# but here it is interest income, not NG debt
+Pi = "Y - u*A*L + iG * D"
+pi = "Pi/K"
+# Investment curve
+Inv = "ai / (bi + ci * pi)^gamma_i - di"
+S = "G - T + Inv * Y"
+
+[equations.ode]
+# Price is cost + markup
+f_P = "tau_P * (u/(1 - monopoly) - P)"
+# Debt is investment less Profit
+f_D = "G - T"       
+# Adjust employment rate toward output-labor ratio
+f_lambda = "lambda * ( Gamma - deprec - alpha - beta )"  
+# Wage increases if labor market tight (small Phi)
+f_u = "u * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)"
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+[solver]
+dt = 0.1
+method = "Tsit5"
+

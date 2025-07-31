@@ -316,64 +316,6 @@ def plot_phase_2d(df, xvar, yvar, aspect=(1.0, 1.0)):
     return fig
 
 
-# def plot_phase_3d(df, xvar, yvar, zvar, aspect=(1.0, 1.0, 1.0)):
-#     x = df[xvar]
-#     y = df[yvar]
-#     z = df[zvar]
-
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter3d(
-#         x=x, y=y, z=z,
-#         mode='lines',
-#         line=dict(width=2),
-#         name=f"{zvar} vs {xvar},{yvar}"
-#     ))
-
-#     fig.update_layout(
-#         title=f"3D Phase Plot: {zvar} vs {xvar},{yvar}",
-#         scene=dict(
-#             xaxis_title=xvar,
-#             yaxis_title=yvar,
-#             zaxis_title=zvar,
-#             xaxis=dict(
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 range=[x.min(), x.max()],
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1
-#                 ),
-#             yaxis=dict(
-#                 range=[y.min(), y.max()],
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1
-#                 ),
-#             zaxis=dict(
-#                 range=[z.min(), z.max()], 
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1
-#                 ),
-#             aspectmode="manual",
-#             aspectratio=dict(
-#                 x=aspect[0],
-#                 y=aspect[1],
-#                 z=aspect[2]
-#             ),
-#             bgcolor="black"
-#         ),
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color="white"),
-#         width=500,
-#         height=500,
-#     )
-#     return fig
 def plot_phase_3d(df, xvar, yvar, zvar, aspect=(1.0, 1.0, 1.0)):
     x = df[xvar]
     y = df[yvar]

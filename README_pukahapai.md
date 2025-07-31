@@ -88,7 +88,6 @@ Main differences:
 
 For old dearpygui + Nim solver attempts see `/home/geon/dev/nim/tutorials/dearpygui_nimcontroller/`
 
-
 Otherwise the basic methodology is the same. For PukahaPai I started
 development without the python MMT Sectoral Balance equation preprocessing, and
 just dived in with a hard coded Damped Pendulum test case.
@@ -117,8 +116,20 @@ Saved models under `./models/` will have past CSV data read back into memory, pl
 solver source code in Julia unpacked, current state set to `t[0]` though (we could change 
 to `t[-1]` later if that's what we wanted).
 
-# Dev Notes
 
+## Empirical Data
+
+I have not yet had time to develop anyuuthign for automating parameter fitting.
+But I did begin a few adta pulls for NZ.
+See,
+```
+~/dev/web/mmt-aotearoa/nzstats/data/
+```
+For github users, you'll have to wait for this to go on the repo. In the meantime, 
+try developing your own parameter fitting scripts. It's not hard, just a chore.
+
+
+# Dev Notes
 
 ```
 project_root/
@@ -329,7 +340,7 @@ sol = solve(prob, {{ method }}(), dt={{ dt }}, adaptive={{ adaptive }}, callback
 
 ## Shared Memory (dearpygui)
 
-The program `pukahaPai` is the GUIO controller.  So far I have tested the 
+The program `pukahaPai` is the GUI controller.  So far I have tested the 
 compatible Julia program stills runs ok stand-alone.
 
 
