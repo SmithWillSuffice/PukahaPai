@@ -3,15 +3,14 @@ model_name = "mmm_model_0_3"
 # K, N, A are decoupled --- can be derived as f(t) in post-processing.
 
 [parameters]
-N0 = 100.0      # Total labor force t=0
+L = 90.0       # initial labour force
+N0 = 100.0     # Total labor force t=0
 K0 = 100.0     # Total capital t=0
 cG = 0.3       # Government spending factor or 'output share'
 varpi = 0.1    # wage share response to employment
 nu = 2.5       # Capital-output ratio (Y = K / nu)
 alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
 beta = 0.01     # population growth rate
-iG = 0.03       # Gov policy rate
-rT = 0.3        # effective equivalent flat tax rate
 monopoly = 0.2   # Markup percentage on firm costs
 s = 0.2          # Savings desires
 Phi_d = 0.05       # Phillips multiplier
@@ -24,9 +23,27 @@ bi = 0.05
 ci = 1.75
 di = 0.0
 gamma_i = 2.0  # Investment exponent
+rT = 0.34       # effective equivalent tax rate
+rW = 0.6        # fraction of tax returned by households
+iG = 0.03       # Gov policy rate
+sigma_F = 0.37  # share of government interest-income to Firms
 
 [variables]
-names = ["P", "D", "u", "lambda"]
+# Legend:
+# 'NG' = Non-government
+# "G_E" (government) central bank exchange settlement balances bank assets.
+# "G_D" government debt held as bonds by any NG sector.
+# "G_T" government tax records.
+# "F_L" Firm sector bank loans (credit) = bank assets.
+# "F_D" Firm sector bank deposits = bank liabilities.
+# "W_L" Household sector bank loans (credit) = bank assets.
+# "W_D" Household sector bank deposits = bank liabilities.
+# "P"  Price level.
+# "D" Total private or NG debt.
+# "u" wage share = w/A.
+# "lambda" employment rate = L/N.
+
+names = ["G_E", "G_D", "G_T", "B_E", "F_L", "F_D", "W_L", "W_D", "P", "D", "u", "lambda"]
 
 [initial_conditions]
 P = 1.0
@@ -39,6 +56,7 @@ A = "A0 * exp(alpha * t)"
 N = "N0 * exp(beta * t)"
 Yr = "lambda * A * N"
 Y = "Y * P"
+L = "lambda * N"
 K = "nu * Y"    # not used?
 # Fiscal functions
 G = "cG * Y"
@@ -56,11 +74,13 @@ pi = "Pi/K"
 Inv = "ai / (bi + ci * pi)^gamma_i - di"
 S = "G - T + Inv * Y"
 
+
 [godley]
 T1 = ['F_D', 'W_D', "u*lambda*A*N", "Worker wages"]
-T2 = ['G_D', 'F_D', "i_G*D_g", "Interest on government debt"]
-T3 = ['F_D', 'G_T', "T", "Corporate tax revenue"]
-T4 = ['W_D', 'G_T', "T", "Household tax revenue"]
+T2 = ['G_D', 'F_D', "sigma_F * i_G * G_D", "Interest to firms"]
+T3 = ['G_D', 'W_D', "(1 - sigma_F) * i_G * G_D", "Interest to households"]
+T4 = ['F_D', 'G_T', "(1 - rW) * rT * T", "Corporate tax revenue"]
+T5 = ['W_D', 'G_T', "rW * rt * T", "Household tax revenue"]
 
 
 [equations.ode]

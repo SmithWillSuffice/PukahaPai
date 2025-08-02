@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# mmm_model_0.2_cmdl.jl - Command-line version
+# mmm_model_0_2_cmdl.jl - Command-line version
 
 using DifferentialEquations
 
@@ -7,7 +7,11 @@ using DifferentialEquations
 
 const N0 = 100.0
 
+const A0 = 1.0
+
 const K0 = 100.0
+
+const tau_P = 0.1
 
 const cG = 0.3
 
@@ -55,15 +59,15 @@ const dt = 0.1
 # This version does not need shared memory parameters, since
 # it is for the cmdl version.
 
-function ode!(du, u, p, t)
+function ode!(df, f, p, t)
     
-            P = u[1]
+            P = f[1]
     
-            D = u[2]
+            D = f[2]
     
-            u = u[3]
+            u = f[3]
     
-            lambda = u[4]
+            lambda = f[4]
     
         # Auxiliary equations
     
@@ -74,7 +78,9 @@ function ode!(du, u, p, t)
     
         Yr = lambda * A * N
     
-        Y = Y * P
+        Y = Yr * P
+    
+        L = lambda * N
     
         K = nu * Y
     
@@ -97,18 +103,18 @@ function ode!(du, u, p, t)
     
         # ODEs
     
-        du[1] = tau_P * (u/(1 - monopoly) - P)
+        df[1] = tau_P * (u/(1 - monopoly) - P)
     
-        du[2] = G - T
+        df[2] = G - T
     
-        du[3] = u * (Phi + varpi * (lambda * ( Gamma - deprec - alpha - beta )) / lambda  + (tau_P * (u/(1 - monopoly) - P)) / P - alpha)
+        df[3] = u * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)
     
-        du[4] = lambda * ( Gamma - deprec - alpha - beta )
+        df[4] = lambda * ( Gamma - deprec - alpha - beta )
     
 end
 
 # Initial conditions
-u0 = [
+f0 = [
 
     1.0,
 
@@ -122,10 +128,10 @@ u0 = [
 
 # Problem setup
 tspan = (t0, t1)
-prob = ODEProblem(ode!, u0, tspan)
+prob = ODEProblem(ode!, f0, tspan)
 
 # Output file
-outfile = open("models/mmm_model_0.2.csv", "w")
+outfile = open("models/mmm_model_0_2.csv", "w")
 write(outfile, "t,P,D,u,lambda\n")
 
 # Callback for writing results
@@ -148,7 +154,7 @@ step_callback = function (integrator)
 end
 
 # Solve the ODE
-cb = DiscreteCallback((u,t,integrator)->true, step_callback)
+cb = DiscreteCallback((f,t,integrator)->true, step_callback)
 sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
 
 # Cleanup

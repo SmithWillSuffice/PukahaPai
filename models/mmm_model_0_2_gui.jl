@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# mmm_model_0.2.jl  - for GUI slaving
+# mmm_model_0_2.jl  - for GUI slaving
 using DifferentialEquations
 import Base.Libc
 using Mmap
@@ -11,7 +11,9 @@ struct mmm_model_0_2_Shared
     t0::Float64
     t1::Float64
     N0::Float64
+    A0::Float64
     K0::Float64
+    tau_P::Float64
     cG::Float64
     varpi::Float64
     nu::Float64
@@ -35,15 +37,11 @@ end
 function open_shared_mmm_model_0_2()
     shmpath = "/dev/shm/pukaha_shared"
     sz = sizeof(mmm_model_0_2_Shared)
-    
-    # Verify shared memory exists and has correct size
     if !isfile(shmpath)
         error("Shared memory file not found - is the GUI controller running?")
     elseif filesize(shmpath) != sz
         error("Shared memory size mismatch - please restart the GUI")
     end
-    
-    # Open with proper error handling
     fd = nothing
     try
         fd = open(shmpath, "r+")
@@ -60,7 +58,7 @@ function read_shared_params()
     try
         return unsafe_load(ptr)
     finally
-        finalize(arr)  # Clean up memory mapping
+        finalize(arr)
     end
 end
 
@@ -90,22 +88,26 @@ function solve_ode()
     csv_write_counter = 0
     csv_write_freq = 5  # Write every 5 steps
     
-    function ode!(du, u, p, t)
+    function ode!(df, f, p, t)
     
-        P = u[1]
+        P = f[1]
     
-        D = u[2]
+        D = f[2]
     
-        u = u[3]
+        u = f[3]
     
-        lambda = u[4]
+        lambda = f[4]
     
 
         # Extract parameters from shared memory struct
     
             N0 = params.N0
     
+            A0 = params.A0
+    
             K0 = params.K0
+    
+            tau_P = params.tau_P
     
             cG = params.cG
     
@@ -153,7 +155,9 @@ function solve_ode()
     
         Yr = lambda * A * N
     
-        Y = Y * P
+        Y = Yr * P
+    
+        L = lambda * N
     
         K = nu * Y
     
@@ -175,20 +179,31 @@ function solve_ode()
     
     
 
-        # ODEs
+        # Compute derivatives (for potential cross-referencing)
     
-        du[1] = tau_P * (u/(1 - monopoly) - P)
+        f_P = tau_P * (u/(1 - monopoly) - P)
     
-        du[2] = G - T
+        f_D = G - T
     
-        du[3] = u * (Phi + varpi * (lambda * ( Gamma - deprec - alpha - beta )) / lambda  + (tau_P * (u/(1 - monopoly) - P)) / P - alpha)
+        f_u = u * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)
     
-        du[4] = lambda * ( Gamma - deprec - alpha - beta )
+        f_lambda = lambda * ( Gamma - deprec - alpha - beta )
+    
+    
+        # Assign derivatives to output vector
+    
+        df[1] = f_P
+    
+        df[2] = f_D
+    
+        df[3] = f_u
+    
+        df[4] = f_lambda
     
 
 end
     
-    u0 = [
+    f0 = [
     
             1.0,
     
@@ -202,8 +217,8 @@ end
     
     tspan = (params.t0, params.t1)
     dt = 0.1
-    prob = ODEProblem(ode!, u0, tspan)
-    outfile = open("models/mmm_model_0.2.csv", "w")
+    prob = ODEProblem(ode!, f0, tspan)
+    outfile = open("models/mmm_model_0_2.csv", "w")
     write(outfile, "t,P,D,u,lambda\n")
     
     # Single, properly defined step_callback function
@@ -235,7 +250,7 @@ end
     end
     
     # DON'T set state to 'r' here - let GUI control it
-    cb = DiscreteCallback((u,t,integrator)->true, step_callback)
+    cb = DiscreteCallback((f,t,integrator)->true, step_callback)
     
     try
         sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
@@ -265,7 +280,7 @@ end
 
 # Main execution loop
 function main()
-    println("Julia solver started for mmm_model_0.2")
+    println("Julia solver started for mmm_model_0_2")
     
     try
         # Create exit condition flag

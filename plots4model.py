@@ -15,252 +15,6 @@ Copyright: (c) 2025 Bijou M. Smith
 License: GNU General Public License v3.0 <https://www.gnu.org/licenses/gpl-
 '''
 
-## Server HTML --- allowed for PORT so browser dark mode could be disabled
-
-# import sys
-# import pandas as pd
-# import plotly.graph_objects as go
-# from plotly.subplots import make_subplots
-# import plotly.io as pio
-# from pathlib import Path
-# from http.server import HTTPServer, SimpleHTTPRequestHandler
-# import threading
-# import webbrowser
-# import os
-
-# # ---- Config ----
-# MODELS_DIR = Path("models")
-# PORT = 55599
-# BACKGROUND_COLOR = "black"
-
-# # ---- Argument ----
-# if len(sys.argv) != 2:
-#     print("Usage: ./plot_model.py <model_name>")
-#     sys.exit(1)
-
-# model_name = sys.argv[1]
-# csv_path = MODELS_DIR / f"{model_name}.csv"
-# html_path = MODELS_DIR / f"{model_name}.html"
-
-# # ---- Load CSV ----
-# try:
-#     df = pd.read_csv(csv_path)
-# except FileNotFoundError:
-#     print(f"Error: CSV not found: {csv_path}")
-#     sys.exit(1)
-
-# if "t" not in df.columns:
-#     print("Error: CSV must contain a 't' column.")
-#     sys.exit(1)
-
-# # ---- Prepare Plot ----
-# variables = [col for col in df.columns if col != "t"]
-# n_vars = len(variables)
-
-# fig = make_subplots(
-#     rows=n_vars,
-#     cols=1,
-#     shared_xaxes=True,
-#     subplot_titles=variables,
-#     vertical_spacing=0.03
-# )
-
-# for i, var in enumerate(variables, start=1):
-#     fig.add_trace(
-#         go.Scatter(x=df["t"], y=df[var], mode="lines", name=var),
-#         row=i,
-#         col=1
-#     )
-
-# fig.update_layout(
-#    height=300 * n_vars,
-#    template="plotly_dark",
-#    paper_bgcolor=BACKGROUND_COLOR,
-#    plot_bgcolor=BACKGROUND_COLOR,
-#    font=dict(color="white"),
-#    showlegend=False,
-#    title_text=f"Model: {model_name}"
-# )
-
-# # ---- Patch HTML Background ----
-# html_str = pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
-# html_str = html_str.replace(
-#    "<head>",
-#    "<head><style>body{background-color:black;}</style>"
-# )
-
-# # ---- Save HTML ----
-# with open(html_path, "w") as f:
-#     f.write(html_str)
-
-# print(f"HTML plot saved to: {html_path}")
-
-# # ---- Serve & Open ----
-# def serve_and_open():
-#     os.chdir(MODELS_DIR)
-#     server_address = ("", PORT)
-#     httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
-#     url = f"http://localhost:{PORT}/{model_name}.html"
-#     print(f"Serving at {url}")
-#     webbrowser.open(url)
-#     httpd.serve_forever()
-
-# thread = threading.Thread(target=serve_and_open, daemon=True)
-# thread.start()
-# thread.join()
-
-
-
-
-## Standalone HTML --- old version
-
-# import sys
-# import os
-# import pandas as pd
-# import plotly.graph_objects as go
-# from plotly.offline import plot as plotly_plot
-# import toml
-
-
-# def load_config(model_name):
-#     config_path = os.path.join("models", f"{model_name}.toml")
-#     if os.path.exists(config_path):
-#         return toml.load(config_path)
-#     return {}
-
-
-# def compute_aspect_ratio(df, vars_):
-#     """Return aspect ratio tuple from data ranges."""
-#     ranges = [df[v].max() - df[v].min() for v in vars_]
-#     # Normalize so smallest range is 1.0
-#     min_range = min(ranges) if min(ranges) > 0 else 1.0
-#     return tuple(round(r / min_range, 4) for r in ranges)
-
-
-# def plot_time_series(df, time_var, value_vars):
-#     fig = go.Figure()
-#     for var in value_vars:
-#         fig.add_trace(go.Scatter(x=df[time_var], y=df[var], mode='lines', name=var))
-#     fig.update_layout(
-#         title="Time Series",
-#         xaxis_title=time_var,
-#         yaxis_title="Values",
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color='white'),
-#         autosize=True,
-#         width=None,
-#         height=400,
-#     )
-#     return fig
-
-
-# def plot_phase_2d(df, xvar, yvar, ratio=None):
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter(x=df[xvar], y=df[yvar], mode='lines', name=f"{yvar} vs {xvar}"))
-
-#     if ratio is None:
-#         xscale, yscale = compute_aspect_ratio(df, [xvar, yvar])
-#     else:
-#         xscale, yscale = ratio
-
-#     fig.update_layout(
-#         title=f"Phase Plot: {yvar} vs {xvar}",
-#         xaxis_title=xvar,
-#         yaxis_title=yvar,
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color='white'),
-#         width=500,
-#         height=500,
-#     )
-#     fig.update_yaxes(scaleanchor="x", scaleratio=yscale / xscale)
-#     return fig
-
-
-# def plot_phase_3d(df, xvar, yvar, zvar, ratio=None):
-#     if ratio is None:
-#         xscale, yscale, zscale = compute_aspect_ratio(df, [xvar, yvar, zvar])
-#     else:
-#         xscale, yscale, zscale = ratio
-
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter3d(
-#         x=df[xvar], y=df[yvar], z=df[zvar],
-#         mode='lines',
-#         line=dict(width=2),
-#         name=f"{zvar} vs {xvar}, {yvar}"
-#     ))
-
-#     fig.update_layout(
-#         title=f"3D Phase Plot: {zvar} vs {xvar}, {yvar}",
-#         scene=dict(
-#             xaxis_title=xvar,
-#             yaxis_title=yvar,
-#             zaxis_title=zvar,
-#             xaxis=dict(backgroundcolor="black", gridcolor="gray"),
-#             yaxis=dict(backgroundcolor="black", gridcolor="gray"),
-#             zaxis=dict(backgroundcolor="black", gridcolor="gray"),
-#             aspectmode="manual",
-#             aspectratio=dict(x=xscale, y=yscale, z=zscale)
-#         ),
-#         paper_bgcolor="black",
-#         font=dict(color='white'),
-#         width=600,
-#         height=600,
-#     )
-#     return fig
-
-
-# def main():
-#     if len(sys.argv) != 2:
-#         print("Usage: python plot_model.py <model_name>")
-#         sys.exit(1)
-
-#     model_name = sys.argv[1]
-#     csv_path = os.path.join("models", f"{model_name}.csv")
-#     df = pd.read_csv(csv_path)
-
-#     config = load_config(model_name)
-#     time_var = "t"
-#     value_vars = [col for col in df.columns if col != time_var]
-
-#     # Time series
-#     time_series_vars = config.get("time_series", value_vars)
-#     fig_ts = plot_time_series(df, time_var, time_series_vars)
-
-#     # Phase plots
-#     phase_plots = config.get("phase_plots")
-#     if not phase_plots:
-#         if len(value_vars) in [2, 3]:
-#             phase_plots = [value_vars]
-
-#     figs = [fig_ts]
-
-#     if phase_plots:
-#         ratio_config = config.get("aspect_ratios", {})
-#         for vars_ in phase_plots:
-#             ratio = tuple(ratio_config.get(":".join(vars_), [])) or None
-#             if len(vars_) == 2:
-#                 figs.append(plot_phase_2d(df, *vars_, ratio=ratio))
-#             elif len(vars_) == 3:
-#                 figs.append(plot_phase_3d(df, *vars_, ratio=ratio))
-#             else:
-#                 print(f"Invalid phase plot config: {vars_}")
-
-
-
-#     # Export to single HTML
-#     html_path = os.path.join("models", f"{model_name}.html")
-#     with open(html_path, "w") as f:
-#         for fig in figs:
-#             f.write(plotly_plot(fig, include_plotlyjs='cdn', output_type='div'))
-
-#     print(f"HTML plot written to {html_path}")
-
-
-# if __name__ == "__main__":
-#     main()
 
 import os
 import sys
@@ -415,7 +169,6 @@ def plot_single_time_series(df, time_var, value_var):
       paper_bgcolor="black",
       plot_bgcolor="black",
       font=dict(color="white"),
-      width=1200,
       height=400,
    )
    return fig
@@ -445,7 +198,6 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
         paper_bgcolor="black",
         plot_bgcolor="black",
         font=dict(color="white"),
-        width=1200,
         height=400,
         xaxis=dict(
             title=time_var,
@@ -481,12 +233,7 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
     return fig
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python plot_model.py <model_name>")
-        sys.exit(1)
-
-    model_name = sys.argv[1]
+def main(model_name):
     csv_path = os.path.join("models", f"{model_name}.csv")
     df = pd.read_csv(csv_path)
 
@@ -539,18 +286,30 @@ def main():
 
     # --- Export each fig to HTML with black background patch ---
     html_path = os.path.join("models", f"{model_name}.html")
+    html_str = ""
+    plot_count = 0
     with open(html_path, "w") as f:
         for fig in figs:
-            html_str = pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
-            html_str = html_str.replace(
-                "<head>",
-                "<head><style>body{background-color:black;}</style>"
-            )
-            f.write(html_str)
+            html_str = html_str + pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
+            #html_str = pio.to_html(fig, full_html=False, include_plotlyjs="cdn")
+            plot_count += 1
+            if plot_count ==1 :
+                html_str = html_str.replace("<head>",
+                                            f"<head><title>Model: {model_name}</title><style>body{{background-color:black;}}</style>"
+                                            )
+                html_str = html_str.replace("<body>",
+                                            f'<body>\n<h2 style="color:lightblue;">Model: {model_name}</h2>'
+                                            )
+        f.write(html_str)
 
     print(f"HTML plot written to {html_path}")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate interactive Plotly plots for a given model's simulation results.")
+    parser.add_argument("model_name", help="The name of the model (e.g., 'pendulum').")
+    args = parser.parse_args()
+    sys.argv = [sys.argv[0], args.model_name]
+    main(args.model_name)
 

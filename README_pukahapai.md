@@ -426,3 +426,7 @@ Next: also see the [MMT Considertations section](#mmt-macroeconomics-considerati
 **Long Wishlist:**
 * Generate full reports? Academic paper-ready.  Should include model summary in
   markdown/katex and even stability analysis reportage.
+
+### CURRENT TODO
+
+* Better check the scripts still work cooridinated before adding the Godely Table support.

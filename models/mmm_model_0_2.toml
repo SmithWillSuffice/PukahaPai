@@ -4,7 +4,9 @@ model_name = "mmm_model_0_2"
 
 [parameters]
 N0 = 100.0      # Total labor force t=0
+A0 = 1.0       # Initial productivity
 K0 = 100.0     # Total capital t=0
+tau_P = 0.1    # Price adjustment speed
 cG = 0.3       # Government spending factor or 'output share'
 varpi = 0.1    # wage share response to employment
 nu = 2.5       # Capital-output ratio (Y = K / nu)
@@ -38,7 +40,8 @@ u = 0.6
 A = "A0 * exp(alpha * t)"
 N = "N0 * exp(beta * t)"
 Yr = "lambda * A * N"
-Y = "Y * P"
+Y = "Yr * P"
+L = "lambda * N"
 K = "nu * Y"    # not used?
 # Fiscal functions
 G = "cG * Y"
@@ -46,7 +49,7 @@ T = "rT * Y"
 # Main Response Functions
 # Phillips curve
 Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
-# Caipital grow model
+# Capital grow model
 Gamma = "(1 - u)/nu - deprec"
 # Profit equation - use nominal Y
 # but here it is interest income, not NG debt
@@ -73,4 +76,3 @@ t1 = 50.0
 [solver]
 dt = 0.1
 method = "Tsit5"
-

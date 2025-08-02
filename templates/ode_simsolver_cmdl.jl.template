@@ -17,9 +17,9 @@ const dt = {{dt}}
 # This version does not need shared memory parameters, since
 # it is for the cmdl version.
 
-function ode!(du, u, p, t)
+function ode!(df, f, p, t)
     {% for name in variable_names %}
-            {{name}} = u[{{loop.index}}]
+            {{name}} = f[{{loop.index}}]
     {% endfor %}
         # Auxiliary equations
     {% if auxiliary_equations %}
@@ -29,12 +29,12 @@ function ode!(du, u, p, t)
     {% endif %}
         # ODEs
     {% for name, expr in ode_equations.items() %}
-        du[{{ loop.index }}] = {{ expr }}
+        df[{{ loop.index }}] = {{ expr }}
     {% endfor %}
 end
 
 # Initial conditions
-u0 = [
+f0 = [
 {% for name in variable_names %}
     {{initial_conditions[name]}}{{ "," if not loop.last }}
 {% endfor %}
@@ -42,7 +42,7 @@ u0 = [
 
 # Problem setup
 tspan = (t0, t1)
-prob = ODEProblem(ode!, u0, tspan)
+prob = ODEProblem(ode!, f0, tspan)
 
 # Output file
 outfile = open("models/{{model_name}}.csv", "w")
@@ -62,7 +62,7 @@ step_callback = function (integrator)
 end
 
 # Solve the ODE
-cb = DiscreteCallback((u,t,integrator)->true, step_callback)
+cb = DiscreteCallback((f,t,integrator)->true, step_callback)
 sol = solve(prob, {{method}}(), dt=dt, adaptive=false, callback=cb)
 
 # Cleanup
