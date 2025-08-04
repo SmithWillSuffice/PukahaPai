@@ -11,7 +11,7 @@ beta = 0.01     # population growth rate
 K0 = 100.0      # Total capital t=0
 nu = 2.5        # Capital-output ratio (Y = K / nu)
 tau_P = 0.1    # Price adjustment speed
-c_G = 0.3        # Government spend_ing factor or 'output share'
+c_G = 0.3        # Government spending factor or 'output share'
 i_G = 0.03       # Gov policy rate
 r_T = 0.3        # effective equivalent flat tax rate
 monopoly = 0.2   # Markup percentage on firm costs
@@ -77,3 +77,8 @@ t1 = 50.0
 [solver]
 dt = 0.1
 method = "Tsit5"
+
+[plots]
+# Optional: restrict which time series to show (omit to show all)
+time_series = ["P", "D", "lambda", "u_s", "Y"]
+
