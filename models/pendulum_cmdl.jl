@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-# pendulum_cmdl.jl - Command-line version
+# pendulum_cmdl.jl - DAE Command-line version
 
 using DifferentialEquations
+using Sundials  # For IDA solver
 
 # Parameters
 
@@ -19,38 +20,56 @@ const t0 = 0.0
 const t1 = 100.0
 const dt = 0.01
 
+function dae!(out, du, u, p, t)
+    # Extract state variables
+    
+    theta = u[1]
+    
+    omega = u[2]
+    
 
-# This version does not need shared memory parameters, since
-# it is for the cmdl version.
+    # Extract derivatives
+    
+    dtheta_dt = du[1]
+    
+    domega_dt = du[2]
+    
 
-function ode!(du, u, p, t)
+    # Auxiliary equations
     
-            theta = u[1]
+
+    # Compute f_<var> expressions
     
-            omega = u[2]
+    f_theta = omega
     
-        # Auxiliary equations
+    f_omega = -damping * omega - (g / length) * sin(theta)
     
-        # ODEs
+
     
-        du[1] = omega
+    out[1] = dtheta_dt - f_theta
     
-        du[2] = -damping * omega - (g / length) * sin(theta)
+    out[2] = domega_dt - f_omega
     
 end
 
-# Initial conditions
+# Initial conditions for state variables
 u0 = [
-
+    
     0.785398,
-
+    
     0.0
-
+    
 ]
+
+# Initial guess for derivatives (can be zeros)
+du0 = zeros(2)
 
 # Problem setup
 tspan = (t0, t1)
-prob = ODEProblem(ode!, u0, tspan)
+# The IDA solver requires the `differential_vars` argument to specify which
+# variables are differential (true) and which are algebraic (false).
+# This assumes all variables are differential.
+prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true])
 
 # Output file
 outfile = open("models/pendulum.csv", "w")
@@ -61,19 +80,19 @@ step_callback = function (integrator)
     t = integrator.t
     y = integrator.u
     write(outfile, string(t))
-
+    
     write(outfile, "," * string(y[1]))
-
+    
     write(outfile, "," * string(y[2]))
-
+    
     write(outfile, "\n")
     flush(outfile)
     return false
 end
 
-# Solve the ODE
-cb = DiscreteCallback((u,t,integrator)->true, step_callback)
-sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
+# Solve the DAE
+cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
 # Cleanup
 close(outfile)

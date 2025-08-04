@@ -1,0 +1,138 @@
+# -*- coding: utf-8 -*-
+# {{ model_name }}_gui.jl - DAE GUI version
+
+using DifferentialEquations
+using Sundials
+using Mmap
+using Sockets
+using SharedArrays
+
+# Auto-generated struct for shared memory interop
+struct {{ model_name }}_Shared
+    state::UInt8
+    t0::Float64
+    t1::Float64
+{% for name in parameters.keys() %}
+    {{ name }}::Float64
+{% endfor %}
+end
+
+function open_shared_{{ model_name }}()
+    shmpath = "/dev/shm/pukaha_shared"
+    sz = sizeof({{ model_name }}_Shared)
+    if !isfile(shmpath)
+        error("Shared memory file not found - is the GUI controller running?")
+    elseif filesize(shmpath) != sz
+        error("Shared memory size mismatch - please restart the GUI")
+    end
+    fd = nothing
+    try
+        fd = open(shmpath, "r+")
+        arr = Mmap.mmap(fd, Vector{UInt8}, sz)
+        return arr, Ptr{ {{ model_name }}_Shared }(pointer(arr))
+    catch e
+        fd !== nothing && close(fd)
+        rethrow(e)
+    end
+end
+
+function read_shared_params()
+    arr, ptr = open_shared_{{ model_name }}()
+    try
+        return unsafe_load(ptr)
+    finally
+        finalize(arr)
+    end
+end
+
+function write_shared_state(new_state::Char)
+    arr, ptr = open_shared_{{ model_name }}()
+    try
+        unsafe_store!(Ptr{UInt8}(pointer(arr)), UInt8(new_state))
+    finally
+        finalize(arr)
+    end
+end
+
+function check_gui_state()
+    arr, ptr = open_shared_{{ model_name }}()
+    try
+        state_byte = unsafe_load(Ptr{UInt8}(pointer(arr)))
+        return Char(state_byte)
+    finally
+        finalize(arr)
+    end
+end
+
+# Time parameters
+const t0 = {{ t0 }}
+const t1 = {{ t1 }}
+const dt = {{ dt }}
+
+function dae!(out, du, u, p, t)
+    # Extract state variables
+    {% for name in variable_names %}
+    {{ name }} = u[{{ loop.index }}]
+    {% endfor %}
+
+    # Extract derivatives
+    {% for name in variable_names %}
+    d{{ name }}_dt = du[{{ loop.index }}]
+    {% endfor %}
+
+    # Auxiliary equations
+    {% for name, expr in auxiliary_equations.items() %}
+    {{ name }} = {{ expr }}
+    {% endfor %}
+
+    # Compute f_<var> expressions
+    {% for name, expr in derivative_computations %}
+    {{ name }} = {{ expr }}
+    {% endfor %}
+
+    {% for name in variable_names %}
+    out[{{ loop.index }}] = d{{ name }}_dt - f_{{ name }}
+    {% endfor %}
+end
+
+function main()
+    # Initial conditions for state variables
+    u0 = [
+        {% for name, value in initial_conditions.items() %}
+        {{ value }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]
+
+    # Initial guess for derivatives (can be zeros)
+    du0 = zeros({{ variable_count }})
+
+    # Problem setup
+    tspan = (t0, t1)
+    prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [{{ differential_vars_list | join(", ") }}])
+
+    # Callback for writing results to a file for GUI visualization
+    # In a production GUI, this would write to shared memory.
+    outfile = open("models/{{ model_name }}.csv", "w")
+    write(outfile, "t,{{ variable_names | join(",") }}\n")
+
+    step_callback = function (integrator)
+        t = integrator.t
+        y = integrator.u
+        write(outfile, string(t))
+        {% for name in variable_names %}
+        write(outfile, "," * string(y[{{ loop.index }}]))
+        {% endfor %}
+        write(outfile, "\n")
+        flush(outfile)
+        return false
+    end
+
+    cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+    sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+
+    close(outfile)
+    println("GUI simulation completed successfully")
+end
+
+# Execute main function
+main()

@@ -30,9 +30,30 @@ The requirements are not hard to install on GNU+Linux OS. Most come from PyPi,
 or apt repositories. So there is no requirements.txt yet. Maybe later when the 
 project is more user-friendly.
 
+Julia packages:
+* Start Julia: Open a terminal and type julia to start the Julia REPL (Read-Eval-Print Loop).
+* Enter Package Mode: Press the `]` key in the Julia REPL to switch to the
+  package manager mode. Your prompt will change from `julia>` to `pkg>`.
+* Add the Packages: Type the following command to add both packages at once:
+```julia
+ add DifferentialEquations Sundials
+```
+or
+```julia
+import Pkg; Pkg.add("Sundials")  # etc.
+```
+* The package manager will download and install the packages and their dependencies. This may take a few minutes.
+* Exit Package Mode: Press the backspace key to return to the regular julia>
+  prompt.
+
+The other packages you see in your this project: Mmap, Sockets, and
+SharedArrays, are normally part of Julia's standard library, so they come
+pre-installed with Julia itself and do not need to be added manually.
+
+
 ## Usage Tips
 
-THe toml for Lorenz Attarctor is `./models/lorenz_attractor.toml`.
+The toml for Lorenz Attarctor is `./models/lorenz_attractor.toml`.
 
 **Warning** you cannot use a period `.` nor other special chars 
 in the toml name, except `.toml` because it is used to generate 
@@ -45,6 +66,21 @@ For the Lorenz Attractor I would just run the cmdl version:
 julia models/lorenz_attractor_cmdl.jl
 ./plots4model.py lorenz_attractor
 ```
+
+## Solvers
+
+Earlier I used the simple ODE solver 
+```julia
+prob = ODEProblem(ode!, u0, tspan)
+```
+but this is no good when some DE's depend upon the other derivatives. So I
+switched to an algebraic solver,
+```julia
+prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true, true, true])
+```
+which might run slower, but gives us more generality --- the cost of writing a
+general purppose package you can say. THough I have not actually compared run
+times.
 
 ## License
 

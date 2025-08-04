@@ -24,7 +24,7 @@ di = 0.0
 gamma_i = 2.0  # Investment exponent
 
 [variables]
-names = ["P", "D", "u", "lambda"]
+names = ["P", "D", "u_s", "lambda"]
 
 [initial_conditions]
 P = 1.0
@@ -41,22 +41,22 @@ K = "nu * Y"    # not used?
 # Main Response Functions
 # Phillips curve
 Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
-# Caipital grow model
-Gamma = "(1 - u)/nu - deprec"
+# Capital grow model
+Gamma = "(1 - u_s)/nu - deprec"
 # Profit equation - use nominal Y
 #Pi = "Y - w*L - ib * D"
-Pi = "Y - u*A*L - ib * D"
+Pi = "Y - u_s*A*L - ib * D"
 pi = "Pi/K"
 # Investment curve
 Inv = "ai / (bi + ci * pi)^gamma_i - di"
 
 [equations.ode]
 # Price is cost + markup
-f_P = "tau_P * (u/(1 - monopoly) - P)"
+f_P = "tau_P * (u_s/(1 - monopoly) - P)"
 # Debt is investment less Profit
 f_D = "Inv - Pi"
 # Wage increases if labor market tight (small Phi)
-f_u = "u * (Phi - c_u)"       
+f_u_s = "u * (Phi - c_u)"       
 # Adjust employment rate toward output-labor ratio
 f_lambda = "lambda * ( Gamma - alpha - beta )"  
 

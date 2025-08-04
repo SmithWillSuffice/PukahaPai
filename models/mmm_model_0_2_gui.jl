@@ -1,37 +1,62 @@
 # -*- coding: utf-8 -*-
-# mmm_model_0_2.jl  - for GUI slaving
-using DifferentialEquations
-import Base.Libc
-using Mmap
+# mmm_model_0_2_gui.jl - DAE GUI version
 
+using DifferentialEquations
+using Sundials
+using Mmap
+using Sockets
+using SharedArrays
 
 # Auto-generated struct for shared memory interop
 struct mmm_model_0_2_Shared
     state::UInt8
     t0::Float64
     t1::Float64
+
     N0::Float64
+
     A0::Float64
-    K0::Float64
-    tau_P::Float64
-    cG::Float64
-    varpi::Float64
-    nu::Float64
+
     alpha::Float64
+
     beta::Float64
-    iG::Float64
-    rT::Float64
+
+    K0::Float64
+
+    nu::Float64
+
+    tau_P::Float64
+
+    c_G::Float64
+
+    i_G::Float64
+
+    r_T::Float64
+
     monopoly::Float64
+
     s::Float64
+
     Phi_d::Float64
+
     Phi_c::Float64
+
     gamma_p::Float64
+
+    varpi::Float64
+
     deprec::Float64
-    ai::Float64
-    bi::Float64
-    ci::Float64
-    di::Float64
+
+    a_i::Float64
+
+    b_i::Float64
+
+    c_i::Float64
+
+    d_i::Float64
+
     gamma_i::Float64
+
 end
 
 function open_shared_mmm_model_0_2()
@@ -46,7 +71,7 @@ function open_shared_mmm_model_0_2()
     try
         fd = open(shmpath, "r+")
         arr = Mmap.mmap(fd, Vector{UInt8}, sz)
-        return arr, Ptr{mmm_model_0_2_Shared}(pointer(arr))
+        return arr, Ptr{ mmm_model_0_2_Shared }(pointer(arr))
     catch e
         fd !== nothing && close(fd)
         rethrow(e)
@@ -81,242 +106,137 @@ function check_gui_state()
     end
 end
 
+# Time parameters
+const t0 = 0.0
+const t1 = 50.0
+const dt = 0.1
 
-function solve_ode()
-    # Read parameters from shared memory
-    params = read_shared_params()
-    csv_write_counter = 0
-    csv_write_freq = 5  # Write every 5 steps
+function dae!(out, du, u, p, t)
+    # Extract state variables
     
-    function ode!(df, f, p, t)
+    P = u[1]
     
-        P = f[1]
+    D = u[2]
     
-        D = f[2]
+    u_s = u[3]
     
-        u = f[3]
-    
-        lambda = f[4]
-    
-
-        # Extract parameters from shared memory struct
-    
-            N0 = params.N0
-    
-            A0 = params.A0
-    
-            K0 = params.K0
-    
-            tau_P = params.tau_P
-    
-            cG = params.cG
-    
-            varpi = params.varpi
-    
-            nu = params.nu
-    
-            alpha = params.alpha
-    
-            beta = params.beta
-    
-            iG = params.iG
-    
-            rT = params.rT
-    
-            monopoly = params.monopoly
-    
-            s = params.s
-    
-            Phi_d = params.Phi_d
-    
-            Phi_c = params.Phi_c
-    
-            gamma_p = params.gamma_p
-    
-            deprec = params.deprec
-    
-            ai = params.ai
-    
-            bi = params.bi
-    
-            ci = params.ci
-    
-            di = params.di
-    
-            gamma_i = params.gamma_i
+    lambda = u[4]
     
 
-        # Auxiliary equations
+    # Extract derivatives
     
+    dP_dt = du[1]
     
-        A = A0 * exp(alpha * t)
+    dD_dt = du[2]
     
-        N = N0 * exp(beta * t)
+    du_s_dt = du[3]
     
-        Yr = lambda * A * N
-    
-        Y = Yr * P
-    
-        L = lambda * N
-    
-        K = nu * Y
-    
-        G = cG * Y
-    
-        T = rT * Y
-    
-        Phi = Phi_d/(1 - lambda)^gamma_p - Phi_c
-    
-        Gamma = (1 - u)/nu - deprec
-    
-        Pi = Y - u*A*L + iG * D
-    
-        pi = Pi/K
-    
-        Inv = ai / (bi + ci * pi)^gamma_i - di
-    
-        S = G - T + Inv * Y
-    
+    dlambda_dt = du[4]
     
 
-        # Compute derivatives (for potential cross-referencing)
+    # Auxiliary equations
     
-        f_P = tau_P * (u/(1 - monopoly) - P)
+    A = A0 * exp(alpha * t)
     
-        f_D = G - T
+    N = N0 * exp(beta * t)
     
-        f_u = u * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)
+    Yr = lambda * A * N
     
-        f_lambda = lambda * ( Gamma - deprec - alpha - beta )
+    Y = Yr * P
     
+    L = lambda * N
     
-        # Assign derivatives to output vector
+    K = nu * Y
     
-        df[1] = f_P
+    G = c_G * Y
     
-        df[2] = f_D
+    T = r_T * Y
     
-        df[3] = f_u
+    Phi = Phi_d/(1 - lambda)^gamma_p - Phi_c
     
-        df[4] = f_lambda
+    Gamma = (1 - u_s)/nu - deprec
+    
+    Pi = Y - u_s*A*L + i_G * D
+    
+    pi = Pi/K
+    
+    Inv = a_i / (b_i + c_i * pi)^gamma_i - d_i
+    
+    S = G - T + Inv * Y
     
 
+    # Compute f_<var> expressions
+    
+    f_P = tau_P * (u_s/(1 - monopoly) - P)
+    
+    f_D = G - T
+    
+    f_lambda = lambda * ( Gamma - deprec - alpha - beta )
+    
+    f_u_s = u_s * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)
+    
+
+    
+    out[1] = dP_dt - f_P
+    
+    out[2] = dD_dt - f_D
+    
+    out[3] = du_s_dt - f_u_s
+    
+    out[4] = dlambda_dt - f_lambda
+    
 end
-    
-    f0 = [
-    
-            1.0,
-    
-            50.0,
-    
-            0.6,
-    
-            0.9
-    
+
+function main()
+    # Initial conditions for state variables
+    u0 = [
+        
+        1.0,
+        
+        50.0,
+        
+        0.6,
+        
+        0.9
+        
     ]
-    
-    tspan = (params.t0, params.t1)
-    dt = 0.1
-    prob = ODEProblem(ode!, f0, tspan)
+
+    # Initial guess for derivatives (can be zeros)
+    du0 = zeros(4)
+
+    # Problem setup
+    tspan = (t0, t1)
+    prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true, true, true])
+
+    # Callback for writing results to a file for GUI visualization
+    # In a production GUI, this would write to shared memory.
     outfile = open("models/mmm_model_0_2.csv", "w")
-    write(outfile, "t,P,D,u,lambda\n")
-    
-    # Single, properly defined step_callback function
+    write(outfile, "t,P,D,u_s,lambda\n")
+
     step_callback = function (integrator)
-        state = check_gui_state()
+        t = integrator.t
+        y = integrator.u
+        write(outfile, string(t))
         
-        if state == 'q'  # Quit signal
-            close(outfile)
-            terminate!(integrator)
-            return true
-        elseif state == 'p'  # Pause signal
-            # For now, just continue (could implement pause logic later)
-            return false
-        end
+        write(outfile, "," * string(y[1]))
         
-        # Write data to file
-        csv_write_counter += 1
-        if csv_write_counter % csv_write_freq == 0
-            t = integrator.t
-            y = integrator.u
-            write(outfile, string(t))
-            for val in y
-                write(outfile, "," * string(val))
-            end
-            write(outfile, "\n")
-            flush(outfile)
-        end
+        write(outfile, "," * string(y[2]))
+        
+        write(outfile, "," * string(y[3]))
+        
+        write(outfile, "," * string(y[4]))
+        
+        write(outfile, "\n")
+        flush(outfile)
         return false
     end
-    
-    # DON'T set state to 'r' here - let GUI control it
+
     cb = DiscreteCallback((f,t,integrator)->true, step_callback)
-    
-    try
-        sol = solve(prob, Tsit5(), dt=dt, adaptive=false, callback=cb)
-        println("Simulation completed successfully")
+    sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
-        # Write final point if needed
-        try
-            t_final = sol.t[end]
-            y_final = sol.u[end]
-            write(outfile, string(t_final))
-            for val in y_final
-                write(outfile, "," * string(val))
-            end
-            write(outfile, "\n")
-            flush(outfile)
-        catch e
-            println("Warning: Failed to write final CSV row: ", e)
-        end
-
-    catch e
-        println("Solver error: ", e)
-        write_shared_state('e')  # Error state
-    finally
-        close(outfile)
-    end
+    close(outfile)
+    println("GUI simulation completed successfully")
 end
 
-# Main execution loop
-function main()
-    println("Julia solver started for mmm_model_0_2")
-    
-    try
-        # Create exit condition flag
-        exit_requested = Ref{Bool}(false)
-        
-        # Set up signal handler
-        Base.exit_on_sigint(false)
-        ccall(:jl_exit_on_sigint, Cvoid, (Cint,), 0)
-        
-        while !exit_requested[]
-            state = check_gui_state()
-            
-            if state == 'r'
-                println("Starting simulation...")
-                solve_ode()
-                write_shared_state('s')  # Completed normally
-            elseif state == 'q'
-                println("Received quit signal")
-                exit_requested[] = true
-                break
-            end
-            
-            sleep(0.1)
-        end
-    catch e
-        println("Julia solver error: ", e)
-        write_shared_state('e')
-    finally
-        println("Julia solver cleanly stopped")
-        try
-            write_shared_state('s')  # Ensure final state
-        catch
-            println("Final state write failed")
-        end
-    end
-end
-
-# Run main function
+# Execute main function
 main()
