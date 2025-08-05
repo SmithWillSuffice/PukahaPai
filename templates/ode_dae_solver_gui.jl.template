@@ -7,6 +7,45 @@ using Mmap
 using Sockets
 using SharedArrays
 
+# Functions for getting eigenvalues (optional)
+{% if eigenvalue_enabled %}
+using LinearAlgebra, ForwardDiff
+
+function compute_jacobian_and_eigenvals(integrator)
+    u = integrator.u
+    du = integrator.du
+    p = integrator.p
+    t = integrator.t
+
+    J = ForwardDiff.jacobian(u_var -> begin
+        tmp = similar(u_var)
+        dae!(tmp, du, u_var, p, t)
+        return tmp
+    end, u)
+
+    return eigvals(J)
+end
+
+function stability_callback(integrator)
+    if integrator.iter % 50 == 0
+        eigs = compute_jacobian_and_eigenvals(integrator)
+        max_real = maximum(real.(eigs))
+        if max_real > 0
+            println("Unstable at t=$(integrator.t), max eigenvalue real part: $max_real")
+        end
+        if isopen(eigen_outfile)
+            write(eigen_outfile, string(integrator.t))
+            for val in eigs
+                write(eigen_outfile, "," * string(val))
+            end
+            write(eigen_outfile, "\n")
+            flush(eigen_outfile)
+        end
+    end
+    return false
+end
+{% endif %}
+
 # Auto-generated struct for shared memory interop
 struct {{ model_name }}_Shared
     state::UInt8
@@ -113,6 +152,10 @@ function main()
     # Callback for writing results to a file for GUI visualization
     # In a production GUI, this would write to shared memory.
     outfile = open("models/{{ model_name }}.csv", "w")
+    {% if eigenvalue_enabled %}
+    eigen_outfile = open("models/{{ model_name }}_eigen.csv", "w")
+    write(eigen_outfile, "t,e1,e2,e3,...\n")  # you may tailor this line manually
+    {% endif %}
     write(outfile, "t,{{ variable_names | join(",") }}\n")
 
     step_callback = function (integrator)
@@ -126,11 +169,20 @@ function main()
         flush(outfile)
         return false
     end
-
+    {% if eigenvalue_enabled %}
+    cb = CallbackSet(
+        DiscreteCallback((f,t,integrator)->true, step_callback),
+        DiscreteCallback((f,t,integrator)->true, stability_callback)
+    )
+    {% else %}
     cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+    {% endif %}
     sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
     close(outfile)
+    {% if eigenvalue_enabled %}
+    close(eigen_outfile)
+    {% endif %}
     println("GUI simulation completed successfully")
 end
 

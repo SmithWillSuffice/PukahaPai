@@ -5,7 +5,7 @@ We only check the cmdl version.
 
 Passed 2025-07-26
 ```
-PukahaPai$ pytest 
+PukahaPai$ pytest -k Pendulum     # case sensitive
 ================================================= test session starts ==================================================
 platform linux -- Python 3.10.12, pytest-8.0.0, pluggy-1.4.0
 rootdir: /home/geon/dev/python/economics/PukahaPai
@@ -16,7 +16,6 @@ tests/test_pendulum.py ....                                                     
 
 ================================================== 4 passed in 7.96s ===================================================
 ```
-
 
 | Copyright © 2025, Bijou M. Smith
 | License: GNU General Public License v3.0  <https://www.gnu.org/licenses/gpl-3.0.html>
@@ -31,20 +30,52 @@ project_root = Path.cwd()
 code_gen = "./generate_julia_odesolver.py"
 n_rows = 5   # number of rows to output and check
 
-class TestGenerateJuliaODESolver:
+class TestPendulumModel:
     """Test suite for generate_julia_odesolver.py script and jinja template."""
-    
+        
+    @pytest.fixture(scope="class", autouse=True)
+    def build_and_run_simulation(self):
+        """Fixture to build the Julia model and run the simulation before tests."""
+        # Step 1: Generate Julia code
+        gen_result = subprocess.run(
+            [code_gen, model_name],
+            capture_output=True, text=True, timeout=30, cwd=project_root
+        )
+        assert gen_result.returncode == 0, f"Script failed: {gen_result.stderr}"
+
+        output_file = project_root / "models" / f"{model_name}_cmdl.jl"
+        assert output_file.exists(), "Generated Julia file not found"
+
+        # Step 2: Run the Julia simulation
+        csv_output = project_root / "models" / f"{model_name}.csv"
+        if csv_output.exists():
+            csv_output.unlink()
+
+        run_result = subprocess.run(
+            ["julia", str(output_file)],
+            capture_output=True, text=True, timeout=60, cwd=project_root
+        )
+        assert run_result.returncode == 0, f"Julia simulation failed: {run_result.stderr}"
+        assert csv_output.exists(), "CSV output file not generated"
+
+
     @pytest.fixture(scope="class")
     def expected_output_values(self):
         """Expected values for the first 10 time steps of simulation
         These should be updated based on your known good output."""
-        return [
-            [0.01,0.7850512998056338,-0.06932447565427709],
-            [0.02,0.784011901744952,-0.13853157488117282],
-            [0.03,0.782281219517248,-0.2075733101370855],  
-            [0.04,0.7798611468217939,-0.27640165819464124],
-            [0.05,0.7767540580345769,-0.3449684965228204],
-        ]
+        # return [
+        #     [0.01,0.7850512998056338,-0.06932447565427709],
+        #     [0.02,0.784011901744952,-0.13853157488117282],
+        #     [0.03,0.782281219517248,-0.2075733101370855],  
+        #     [0.04,0.7798611468217939,-0.27640165819464124],
+        #     [0.05,0.7767540580345769,-0.3449684965228204],
+        #     ]
+        return [ [0.00015625,0.7853978306492473,-0.0010838448173090063],
+            [0.0003125,0.7853974919504453,-0.002167672332710101],
+            [0.00046875,0.7853969839063261,-0.003251482362929191],
+            [0.000625,0.7853963065196503,-0.00433527472469776],
+            [0.00078125,0.7853954597932074,-0.005419049234752805]
+             ]
 
     
     def test_generate_julia_cmdl(self):

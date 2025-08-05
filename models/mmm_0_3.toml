@@ -1,0 +1,103 @@
+model_name = "mmm_0_3"
+# Closed circuit model, no price ODE, no debt.
+# K, N, A are decoupled --- can be derived as f(t) in post-processing.
+
+[parameters]
+L = 90.0       # initial labour force
+N0 = 100.0     # Total labor force t=0
+K0 = 100.0     # Total capital t=0
+cG = 0.3       # Government spending factor or 'output share'
+varpi = 0.1    # wage share response to employment
+nu = 2.5       # Capital-output ratio (Y = K / nu)
+alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
+beta = 0.01     # population growth rate
+monopoly = 0.2   # Markup percentage on firm costs
+s = 0.2          # Savings desires
+Phi_d = 0.05       # Phillips multiplier
+Phi_c = 1.0        # Phillips offset
+gamma_p = 2.0      # Phillips exponent
+deprec = 0.05     # Capital depreciation constant
+# Investment response parameters: power law
+ai = 0.05
+bi = 0.05
+ci = 1.75
+di = 0.0
+gamma_i = 2.0  # Investment exponent
+rT = 0.34       # effective equivalent tax rate
+rW = 0.6        # fraction of tax returned by households
+iG = 0.03       # Gov policy rate
+sigma_F = 0.37  # share of government interest-income to Firms
+
+[variables]
+# Legend:
+# 'NG' = Non-government
+# "G_E" (government) central bank exchange settlement balances bank assets.
+# "G_D" government debt held as bonds by any NG sector.
+# "G_T" government tax records.
+# "F_L" Firm sector bank loans (credit) = bank assets.
+# "F_D" Firm sector bank deposits = bank liabilities.
+# "W_L" Household sector bank loans (credit) = bank assets.
+# "W_D" Household sector bank deposits = bank liabilities.
+# "P"  Price level.
+# "D" Total private or NG debt.
+# "u" wage share = w/A.
+# "lambda" employment rate = L/N.
+
+names = ["G_E", "G_D", "G_T", "B_E", "F_L", "F_D", "W_L", "W_D", "P", "D", "u", "lambda"]
+
+[initial_conditions]
+P = 1.0
+D = 50.0
+lambda = 0.9
+u = 0.6
+
+[equations.auxiliary]
+A = "A0 * exp(alpha * t)"
+N = "N0 * exp(beta * t)"
+Yr = "lambda * A * N"
+Y = "Y * P"
+L = "lambda * N"
+K = "nu * Y"    # not used?
+# Fiscal functions
+G = "cG * Y"
+T = "rT * Y"
+# Main Response Functions
+# Phillips curve
+Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
+# Caipital grow model
+Gamma = "(1 - u)/nu - deprec"
+# Profit equation - use nominal Y
+# but here it is interest income, not NG debt
+Pi = "Y - u*A*L + iG * D"
+pi = "Pi/K"
+# Investment curve
+Inv = "ai / (bi + ci * pi)^gamma_i - di"
+S = "G - T + Inv * Y"
+
+
+[godley]
+T1 = ['F_D', 'W_D', "u*lambda*A*N", "Worker wages"]
+T2 = ['G_D', 'F_D', "sigma_F * i_G * G_D", "Interest to firms"]
+T3 = ['G_D', 'W_D', "(1 - sigma_F) * i_G * G_D", "Interest to households"]
+T4 = ['F_D', 'G_T', "(1 - rW) * rT * T", "Corporate tax revenue"]
+T5 = ['W_D', 'G_T', "rW * rt * T", "Household tax revenue"]
+
+
+[equations.ode]
+# Price is cost + markup
+f_P = "tau_P * (u/(1 - monopoly) - P)"
+# Debt is investment less Profit
+f_D = "G - T"       
+# Adjust employment rate toward output-labor ratio
+f_lambda = "lambda * ( Gamma - deprec - alpha - beta )"  
+# Wage increases if labor market tight (small Phi)
+f_u = "u * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)"
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+[solver]
+dt = 0.1
+method = "Tsit5"
+

@@ -4,6 +4,8 @@
 using DifferentialEquations
 using Sundials  # For IDA solver
 
+
+
 # Parameters
 
 const mass = 1.0
@@ -73,6 +75,8 @@ prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true])
 
 # Output file
 outfile = open("models/pendulum.csv", "w")
+
+
 write(outfile, "t,theta,omega\n")
 
 # Callback for writing results
@@ -90,10 +94,13 @@ step_callback = function (integrator)
     return false
 end
 
-# Solve the DAE
+
 cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+
+# Solve the DAE
 sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
 # Cleanup
 close(outfile)
+
 println("Simulation completed successfully")

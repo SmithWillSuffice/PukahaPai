@@ -15,800 +15,193 @@ Copyright: (c) 2025 Bijou M. Smith
 License: GNU General Public License v3.0 <https://www.gnu.org/licenses/gpl-
 '''
 
-# import os
-# import sys
-# import toml
-# import numpy as np
-# import pandas as pd
-# import plotly.graph_objects as go
-# import plotly.io as pio
-# from plotly.subplots import make_subplots
-
-
-# def load_config(model_name):
-#     config_path = os.path.join("models", f"{model_name}.toml")
-#     if not os.path.exists(config_path):
-#         return {}
-#     return toml.load(config_path)
-
-
-
-# def plot_phase_2d(df, xvar, yvar, aspect=(1.0, 1.0)):
-#     x = df[xvar]
-#     y = df[yvar]
-
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=f"{yvar} vs {xvar}"))
-
-#     x_min, x_max = x.min(), x.max()
-#     y_min, y_max = y.min(), y.max()
-
-#     fig.update_layout(
-#         title=f"Phase Plot: {yvar} vs {xvar}",
-#         xaxis=dict(title=xvar,
-#             range=[x_min, x_max], 
-#             showgrid=True,
-#             gridcolor='rgba(100, 100, 100, 0.3)',  
-#             zeroline=True,
-#             zerolinecolor='rgba(100, 100, 100, 0.5)',
-#             zerolinewidth=1
-#             ),
-#         yaxis=dict(title=yvar,
-#             range=[y_min, y_max],
-#             showgrid=True,
-#             gridcolor='rgba(100, 100, 100, 0.3)',
-#             zeroline=True,
-#             zerolinecolor='rgba(100, 100, 100, 0.5)',
-#             zerolinewidth=1,
-#             ),
-#         width=int(400 * aspect[0]),
-#         height=int(400 * aspect[1]),
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color="white"),
-#     )
-#     return fig
-
-
-# def plot_phase_3d(df, xvar, yvar, zvar, aspect=(1.0, 1.0, 1.0)):
-#     x = df[xvar]
-#     y = df[yvar]
-#     z = df[zvar]
-
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter3d(
-#         x=x, y=y, z=z,
-#         mode='lines',
-#         line=dict(width=2),
-#         name=f"{zvar} vs {xvar},{yvar}"
-#     ))
-
-#     transparent = 'rgba(0,0,0,0)'
-
-#     fig.update_layout(
-#         title=f"3D Phase Plot: {zvar} vs {xvar},{yvar}",
-#         scene=dict(
-#             xaxis_title=xvar,
-#             yaxis_title=yvar,
-#             zaxis_title=zvar,
-#             xaxis=dict(
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 range=[x.min(), x.max()],
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1,
-#                 backgroundcolor=transparent
-#             ),
-#             yaxis=dict(
-#                 range=[y.min(), y.max()],
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1,
-#                 backgroundcolor=transparent
-#             ),
-#             zaxis=dict(
-#                 range=[z.min(), z.max()],
-#                 showgrid=True,
-#                 gridcolor='rgba(100, 100, 100, 0.3)',
-#                 zeroline=True,
-#                 zerolinecolor='rgba(100, 100, 100, 0.5)',
-#                 zerolinewidth=1,
-#                 backgroundcolor=transparent
-#             ),
-#             aspectmode="manual",
-#             aspectratio=dict(
-#                 x=aspect[0],
-#                 y=aspect[1],
-#                 z=aspect[2]
-#             ),
-#             bgcolor="black"
-#         ),
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color="white"),
-#         width=500,
-#         height=500,
-#     )
-#     return fig
-
-# def plot_time_series(df, time_var, value_vars):
-#     if len(value_vars) == 1:
-#         return plot_single_time_series(df, time_var, value_vars[0])
-#     elif len(value_vars) == 2:
-#         return plot_dual_axis_time_series(df, time_var, value_vars)
-#     else:
-#         figs = []
-#         for var in value_vars:
-#             figs.append(plot_single_time_series(df, time_var, var))
-#         return figs
-
-
-# def plot_single_time_series(df, time_var, value_var):
-#    fig = go.Figure()
-#    fig.add_trace(go.Scatter(x=df[time_var], y=df[value_var],
-#                             mode='lines', name=value_var))
-#    fig.update_layout(
-#       title=f"Time Series: {value_var}",
-#         xaxis=dict( title=time_var,
-#         showgrid=True,
-#         gridcolor='rgba(100, 100, 100, 0.3)',
-#         zeroline=True,
-#         zerolinecolor='rgba(100, 100, 100, 0.5)',
-#         zerolinewidth=1
-#         ),
-#       yaxis=dict( title=value_var,  
-#         showgrid=True,
-#         gridcolor='rgba(100, 100, 100, 0.3)',
-#         zeroline=True,
-#         zerolinecolor='rgba(100, 100, 100, 0.5)',
-#         zerolinewidth=1
-#         ),
-#       paper_bgcolor="black",
-#       plot_bgcolor="black",
-#       font=dict(color="white"),
-#       height=400,
-#    )
-#    return fig
-
-
-# def plot_dual_axis_time_series(df, time_var, value_vars):
-#     var1, var2 = value_vars
-
-#     # Define line colors (you can change or parameterize these if needed)
-#     color1 = 'rgb(31, 119, 180)'  # blue
-#     color2 = 'rgb(255, 127, 14)'  # orange
-
-#     # Faint versions for grid/zero lines
-#     faint1 = 'rgba(31, 119, 180, 0.4)'
-#     faint2 = 'rgba(255, 127, 14, 0.4)'
-
-#     fig = go.Figure()
-#     fig.add_trace(go.Scatter(x=df[time_var], y=df[var1],
-#                                 mode='lines', name=var1, yaxis='y1',
-#                                 line=dict(color=color1)))
-#     fig.add_trace(go.Scatter(x=df[time_var], y=df[var2],
-#                                 mode='lines', name=var2, yaxis='y2',
-#                                 line=dict(color=color2)))
-
-#     fig.update_layout(
-#         title=f"Time Series: {var1} & {var2}",
-#         paper_bgcolor="black",
-#         plot_bgcolor="black",
-#         font=dict(color="white"),
-#         height=400,
-#         xaxis=dict(
-#             title=time_var,
-#             gridcolor='rgba(100,100,100,0.3)',
-#             # zeroline=True,
-#             # zerolinecolor='rgba(150, 150, 150, 0.4)',
-#             # zerolinewidth=1
-#         ),
-#         yaxis=dict(
-#             title=var1,
-#             color=color1,
-#             gridcolor='rgba(100,100,100,0.3)',
-#             zeroline=True,
-#             zerolinecolor=faint1,
-#             zerolinewidth=1,
-#             titlefont=dict(color=color1),
-#             tickfont=dict(color=color1)
-#         ),
-#         yaxis2=dict(
-#             title=var2,
-#             color=color2,
-#             overlaying='y',
-#             side='right',
-#             gridcolor='rgba(100,100,100,0.3)',
-#             zeroline=True,
-#             zerolinecolor=faint2,
-#             zerolinewidth=1,
-#             titlefont=dict(color=color2),
-#             tickfont=dict(color=color2)
-#         )
-#     )
-
-#     return fig
-
-
-# def main(model_name):
-#     csv_path = os.path.join("models", f"{model_name}.csv")
-#     df = pd.read_csv(csv_path)
-
-#     # Load the toml config for this model
-#     config = load_config(model_name)
-#     time_var = "t"
-#     value_vars = [col for col in df.columns if col != time_var]
-
-#     # Time series plots
-#     time_series_vars = config.get("time_series", value_vars)
-#     max_vars_per_plot = config.get("max_vars_per_plot", 2)
-
-#     figs = []
-
-#     # --- Handle time series plots (always return a list of figs) ---
-#     if len(time_series_vars) > max_vars_per_plot:
-#         for i in range(0, len(time_series_vars), max_vars_per_plot):
-#             subset = time_series_vars[i:i + max_vars_per_plot]
-#             fig_list = plot_time_series(df, time_var, subset)
-#             if isinstance(fig_list, list):
-#                 figs.extend(fig_list)
-#             else:
-#                 figs.append(fig_list)
-#     else:
-#         fig_list = plot_time_series(df, time_var, time_series_vars)
-#         if isinstance(fig_list, list):
-#             figs.extend(fig_list)
-#         else:
-#             figs.append(fig_list)
-
-#     # --- Phase plots from toml ---
-#     phase_cfgs = config.get("plots", {}).get("phase", [])
-#     if not phase_cfgs:
-#         if len(value_vars) in (2, 3):
-#             phase_cfgs = [{"vars": value_vars}]
-
-#     for cfg in phase_cfgs:
-#         vars_ = cfg["vars"]
-#         aspect = cfg.get("aspect", [1.0] * len(vars_))
-
-#         if len(vars_) == 2:
-#             fig = plot_phase_2d(df, vars_[0], vars_[1], aspect)
-#         elif len(vars_) == 3:
-#             fig = plot_phase_3d(df, vars_[0], vars_[1], vars_[2], aspect)
-#         else:
-#             print(f"Invalid phase plot config: {vars_}")
-#             continue
-
-#         figs.append(fig)
-
-#     # --- Export each fig to HTML with black background patch ---
-#     html_path = os.path.join("models", f"{model_name}.html")
-#     html_str = ""
-#     plot_count = 0
-#     with open(html_path, "w") as f:
-#         for fig in figs:
-#             html_str = html_str + pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
-#             #html_str = pio.to_html(fig, full_html=False, include_plotlyjs="cdn")
-#             plot_count += 1
-#             if plot_count ==1 :
-#                 html_str = html_str.replace("<head>",
-#                                             f"<head><title>Model: {model_name}</title><style>body{{background-color:black;}}</style>"
-#                                             )
-#                 html_str = html_str.replace("<body>",
-#                                             f'<body>\n<h2 style="color:lightblue;">Model: {model_name}</h2>'
-#                                             )
-#         f.write(html_str)
-
-#     print(f"HTML plot written to {html_path}")
-
-
-# if __name__ == "__main__":
-#     import argparse
-#     parser = argparse.ArgumentParser(description="Generate interactive Plotly plots for a given model's simulation results.")
-#     parser.add_argument("model_name", help="The name of the model (e.g., 'pendulum').")
-#     args = parser.parse_args()
-#     sys.argv = [sys.argv[0], args.model_name]
-#     main(args.model_name)
 import os
-import sys
-import toml
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.io as pio
-from plotly.subplots import make_subplots
-import re
-
-
-def load_config(model_name):
-    config_path = os.path.join("models", f"{model_name}.toml")
-    if not os.path.exists(config_path):
-        return {}
-    return toml.load(config_path)
-
-
-def convert_julia_to_python(expression, parameters):
-    """
-    Convert Julia mathematical expressions to Python/NumPy equivalents.
-    
-    Args:
-        expression: Julia expression string
-        parameters: Dictionary of parameter values for substitution
-    
-    Returns:
-        Python expression string ready for evaluation
-    """
-    # Start with the original expression
-    py_expr = expression
-    
-    # Replace Julia exponentiation with Python
-    py_expr = re.sub(r'\^', '**', py_expr)
-    
-    # Replace Julia exp function with numpy exp
-    py_expr = re.sub(r'\bexp\(', 'np.exp(', py_expr)
-    
-    # Replace other common Julia math functions with numpy equivalents
-    julia_to_numpy = {
-        r'\bsin\(': 'np.sin(',
-        r'\bcos\(': 'np.cos(',
-        r'\btan\(': 'np.tan(',
-        r'\blog\(': 'np.log(',
-        r'\bsqrt\(': 'np.sqrt(',
-        r'\babs\(': 'np.abs(',
-    }
-    
-    for julia_func, numpy_func in julia_to_numpy.items():
-        py_expr = re.sub(julia_func, numpy_func, py_expr)
-    
-    # Substitute parameter values
-    for param_name, param_value in parameters.items():
-        # Use word boundaries to avoid partial matches
-        pattern = r'\b' + re.escape(param_name) + r'\b'
-        py_expr = re.sub(pattern, str(param_value), py_expr)
-    
-    return py_expr
-
-
-def compute_derived_variables(df, config):
-    """
-    Compute derived variables from auxiliary equations in the config.
-    
-    Args:
-        df: DataFrame with base variables (t and ODE variables)
-        config: TOML configuration dictionary
-    
-    Returns:
-        DataFrame with added derived variables
-    """
-    # Get parameters for substitution
-    parameters = config.get("parameters", {})
-    
-    # Get auxiliary equations
-    auxiliary_eqs = config.get("equations", {}).get("auxiliary", {})
-    
-    if not auxiliary_eqs:
-        return df
-    
-    # Create a copy of the dataframe to avoid modifying the original
-    df_extended = df.copy()
-    
-    # Create a namespace for evaluation that includes numpy and existing columns
-    # Handle 'lambda' as a special case since it's a Python keyword
-    eval_namespace = {
-        'np': np,
-        't': df_extended['t'].values,
-    }
-    
-    # Add all existing columns to namespace, handling 'lambda' specially
-    for col in df_extended.columns:
-        if col == 'lambda':
-            eval_namespace['lambda_var'] = df_extended[col].values
-        else:
-            eval_namespace[col] = df_extended[col].values
-    
-    # Sort auxiliary equations by dependency (simple topological sort)
-    # This ensures variables are computed in the right order
-    computed_vars = set(df_extended.columns)
-    remaining_eqs = auxiliary_eqs.copy()
-    
-    max_iterations = len(remaining_eqs) * 2  # Prevent infinite loops
-    iteration = 0
-    
-    while remaining_eqs and iteration < max_iterations:
-        iteration += 1
-        progress_made = False
-        
-        for var_name, expression in list(remaining_eqs.items()):
-            # Convert Julia expression to Python
-            py_expr = convert_julia_to_python(expression, parameters)
-            
-            # Handle 'lambda' keyword issue by replacing with 'lambda_var'
-            py_expr = re.sub(r'\blambda\b', 'lambda_var', py_expr)
-            
-            # Extract variable names from the expression
-            var_pattern = r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
-            expr_vars = set(re.findall(var_pattern, py_expr))
-            
-            # Remove numpy functions and constants, but keep variable names
-            numpy_items = {'np', 'exp', 'sin', 'cos', 'tan', 'log', 'sqrt', 'abs', 'e'}
-            # Don't remove 'pi' since it might be a user variable, not np.pi
-            expr_vars = expr_vars - numpy_items
-            
-            # Convert 'lambda' references back for dependency checking
-            expr_vars_original = set()
-            for var in expr_vars:
-                if var == 'lambda_var':
-                    expr_vars_original.add('lambda')
-                else:
-                    expr_vars_original.add(var)
-            
-            # Check if all required variables are available
-            if expr_vars_original.issubset(computed_vars):
-                try:
-                    # Evaluate the expression
-                    result = eval(py_expr, {"__builtins__": {}}, eval_namespace)
-                    
-                    # Add to dataframe and evaluation namespace
-                    df_extended[var_name] = result
-                    
-                    # Handle special case for lambda in namespace
-                    if var_name == 'lambda':
-                        eval_namespace['lambda_var'] = result
-                    else:
-                        eval_namespace[var_name] = result
-                    
-                    computed_vars.add(var_name)
-                    
-                    # Remove from remaining equations
-                    del remaining_eqs[var_name]
-                    progress_made = True
-                    
-                    print(f"Computed derived variable: {var_name}")
-                    
-                except Exception as e:
-                    print(f"Warning: Could not compute {var_name} = {py_expr}: {e}")
-                    # Don't remove immediately, might work in next iteration
-            else:
-                missing_vars = expr_vars_original - computed_vars
-                if iteration == 1:  # Only print on first iteration to avoid spam
-                    print(f"Waiting for dependencies for {var_name}: {missing_vars}")
-        
-        if not progress_made:
-            # Try one more time with more detailed error reporting
-            print("No progress made, checking remaining equations...")
-            for var_name, expression in remaining_eqs.items():
-                py_expr = convert_julia_to_python(expression, parameters)
-                py_expr = re.sub(r'\blambda\b', 'lambda_var', py_expr)
-                
-                var_pattern = r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
-                expr_vars = set(re.findall(var_pattern, py_expr))
-                numpy_items = {'np', 'exp', 'sin', 'cos', 'tan', 'log', 'sqrt', 'abs', 'e'}
-                expr_vars = expr_vars - numpy_items
-                
-                expr_vars_original = set()
-                for var in expr_vars:
-                    if var == 'lambda_var':
-                        expr_vars_original.add('lambda')
-                    else:
-                        expr_vars_original.add(var)
-                
-                missing_vars = expr_vars_original - computed_vars
-                available_in_namespace = [var for var in expr_vars if var in eval_namespace]
-                
-                print(f"  {var_name}: expression = {py_expr}")
-                print(f"    required vars: {expr_vars_original}")
-                print(f"    missing vars: {missing_vars}")
-                print(f"    available in namespace: {available_in_namespace}")
-            break
-    
-    # Warn about any remaining uncomputed variables
-    if remaining_eqs:
-        print(f"Warning: Could not compute the following derived variables: {list(remaining_eqs.keys())}")
-    
-    return df_extended
-
-
-def plot_phase_2d(df, xvar, yvar, aspect=(1.0, 1.0)):
-    x = df[xvar]
-    y = df[yvar]
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=f"{yvar} vs {xvar}"))
-
-    x_min, x_max = x.min(), x.max()
-    y_min, y_max = y.min(), y.max()
-
-    fig.update_layout(
-        title=f"Phase Plot: {yvar} vs {xvar}",
-        xaxis=dict(title=xvar,
-            range=[x_min, x_max], 
-            showgrid=True,
-            gridcolor='rgba(100, 100, 100, 0.3)',  
-            zeroline=True,
-            zerolinecolor='rgba(100, 100, 100, 0.5)',
-            zerolinewidth=1
-            ),
-        yaxis=dict(title=yvar,
-            range=[y_min, y_max],
-            showgrid=True,
-            gridcolor='rgba(100, 100, 100, 0.3)',
-            zeroline=True,
-            zerolinecolor='rgba(100, 100, 100, 0.5)',
-            zerolinewidth=1,
-            ),
-        width=int(400 * aspect[0]),
-        height=int(400 * aspect[1]),
-        paper_bgcolor="black",
-        plot_bgcolor="black",
-        font=dict(color="white"),
-    )
-    return fig
-
-
-def plot_phase_3d(df, xvar, yvar, zvar, aspect=(1.0, 1.0, 1.0)):
-    x = df[xvar]
-    y = df[yvar]
-    z = df[zvar]
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter3d(
-        x=x, y=y, z=z,
-        mode='lines',
-        line=dict(width=2),
-        name=f"{zvar} vs {xvar},{yvar}"
-    ))
-
-    transparent = 'rgba(0,0,0,0)'
-
-    fig.update_layout(
-        title=f"3D Phase Plot: {zvar} vs {xvar},{yvar}",
-        scene=dict(
-            xaxis_title=xvar,
-            yaxis_title=yvar,
-            zaxis_title=zvar,
-            xaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(100, 100, 100, 0.3)',
-                range=[x.min(), x.max()],
-                zeroline=True,
-                zerolinecolor='rgba(100, 100, 100, 0.5)',
-                zerolinewidth=1,
-                backgroundcolor=transparent
-            ),
-            yaxis=dict(
-                range=[y.min(), y.max()],
-                showgrid=True,
-                gridcolor='rgba(100, 100, 100, 0.3)',
-                zeroline=True,
-                zerolinecolor='rgba(100, 100, 100, 0.5)',
-                zerolinewidth=1,
-                backgroundcolor=transparent
-            ),
-            zaxis=dict(
-                range=[z.min(), z.max()],
-                showgrid=True,
-                gridcolor='rgba(100, 100, 100, 0.3)',
-                zeroline=True,
-                zerolinecolor='rgba(100, 100, 100, 0.5)',
-                zerolinewidth=1,
-                backgroundcolor=transparent
-            ),
-            aspectmode="manual",
-            aspectratio=dict(
-                x=aspect[0],
-                y=aspect[1],
-                z=aspect[2]
-            ),
-            bgcolor="black"
-        ),
-        paper_bgcolor="black",
-        plot_bgcolor="black",
-        font=dict(color="white"),
-        width=500,
-        height=500,
-    )
-    return fig
-
-def plot_time_series(df, time_var, value_vars):
-    if len(value_vars) == 1:
-        return plot_single_time_series(df, time_var, value_vars[0])
-    elif len(value_vars) == 2:
-        return plot_dual_axis_time_series(df, time_var, value_vars)
-    else:
-        figs = []
-        for var in value_vars:
-            figs.append(plot_single_time_series(df, time_var, var))
-        return figs
-
-
-def plot_single_time_series(df, time_var, value_var):
-   fig = go.Figure()
-   fig.add_trace(go.Scatter(x=df[time_var], y=df[value_var],
-                            mode='lines', name=value_var))
-   fig.update_layout(
-      title=f"Time Series: {value_var}",
-        xaxis=dict( title=time_var,
-        showgrid=True,
-        gridcolor='rgba(100, 100, 100, 0.3)',
-        zeroline=True,
-        zerolinecolor='rgba(100, 100, 100, 0.5)',
-        zerolinewidth=1
-        ),
-      yaxis=dict( title=value_var,  
-        showgrid=True,
-        gridcolor='rgba(100, 100, 100, 0.3)',
-        zeroline=True,
-        zerolinecolor='rgba(100, 100, 100, 0.5)',
-        zerolinewidth=1
-        ),
-      paper_bgcolor="black",
-      plot_bgcolor="black",
-      font=dict(color="white"),
-      height=400,
-   )
-   return fig
-
-
-def plot_dual_axis_time_series(df, time_var, value_vars):
-    var1, var2 = value_vars
-
-    # Define line colors (you can change or parameterize these if needed)
-    color1 = 'rgb(31, 119, 180)'  # blue
-    color2 = 'rgb(255, 127, 14)'  # orange
-
-    # Faint versions for grid/zero lines
-    faint1 = 'rgba(31, 119, 180, 0.4)'
-    faint2 = 'rgba(255, 127, 14, 0.4)'
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df[time_var], y=df[var1],
-                                mode='lines', name=var1, yaxis='y1',
-                                line=dict(color=color1)))
-    fig.add_trace(go.Scatter(x=df[time_var], y=df[var2],
-                                mode='lines', name=var2, yaxis='y2',
-                                line=dict(color=color2)))
-
-    fig.update_layout(
-        title=f"Time Series: {var1} & {var2}",
-        paper_bgcolor="black",
-        plot_bgcolor="black",
-        font=dict(color="white"),
-        height=400,
-        xaxis=dict(
-            title=time_var,
-            gridcolor='rgba(100,100,100,0.3)',
-            # zeroline=True,
-            # zerolinecolor='rgba(150, 150, 150, 0.4)',
-            # zerolinewidth=1
-        ),
-        yaxis=dict(
-            title=var1,
-            color=color1,
-            gridcolor='rgba(100,100,100,0.3)',
-            zeroline=True,
-            zerolinecolor=faint1,
-            zerolinewidth=1,
-            titlefont=dict(color=color1),
-            tickfont=dict(color=color1)
-        ),
-        yaxis2=dict(
-            title=var2,
-            color=color2,
-            overlaying='y',
-            side='right',
-            gridcolor='rgba(100,100,100,0.3)',
-            zeroline=True,
-            zerolinecolor=faint2,
-            zerolinewidth=1,
-            titlefont=dict(color=color2),
-            tickfont=dict(color=color2)
-        )
-    )
-
-    return fig
+from stability import load_eigenvalues, generate_stability_figures, generate_stability_report_html
+from plot_utils import (
+    load_config, compute_derived_variables, plot_time_series,
+    plot_phase_2d, plot_phase_3d
+)
 
 
 def main(model_name):
+    model_dir = os.path.join("models", model_name)
     csv_path = os.path.join("models", f"{model_name}.csv")
     df = pd.read_csv(csv_path)
 
-    # Load the toml config for this model
     config = load_config(model_name)
-    
-    # Compute derived variables and add them to the dataframe
-    print("Computing derived variables...")
     df = compute_derived_variables(df, config)
-    
+
     time_var = "t"
     value_vars = [col for col in df.columns if col != time_var]
+    ts_figs = []
+    stability_figs = []
+    markdown_report = ""
 
-    # Time series plots
-    time_series_vars = config.get("plots", {}).get("time_series", value_vars)
+    # --- Time series plots ---
+    ts_vars = config.get("plots", {}).get("time_series", value_vars)
     max_vars_per_plot = config.get("max_vars_per_plot", 2)
-
-    # Validate that requested time series variables exist
     available_vars = set(df.columns)
-    requested_vars = set(time_series_vars)
-    missing_vars = requested_vars - available_vars
-    
-    if missing_vars:
-        print(f"Warning: The following requested variables are not available: {missing_vars}")
-        time_series_vars = [var for var in time_series_vars if var in available_vars]
+    ts_vars = [v for v in ts_vars if v in available_vars]
 
-    figs = []
-
-    # --- Handle time series plots (always return a list of figs) ---
-    if len(time_series_vars) > max_vars_per_plot:
-        for i in range(0, len(time_series_vars), max_vars_per_plot):
-            subset = time_series_vars[i:i + max_vars_per_plot]
-            fig_list = plot_time_series(df, time_var, subset)
-            if isinstance(fig_list, list):
-                figs.extend(fig_list)
-            else:
-                figs.append(fig_list)
+    if len(ts_vars) > max_vars_per_plot:
+        for i in range(0, len(ts_vars), max_vars_per_plot):
+            subset = ts_vars[i:i + max_vars_per_plot]
+            ts_figs.extend(plot_time_series(df, time_var, subset))
     else:
-        fig_list = plot_time_series(df, time_var, time_series_vars)
-        if isinstance(fig_list, list):
-            figs.extend(fig_list)
-        else:
-            figs.append(fig_list)
+        ts_figs.extend(plot_time_series(df, time_var, ts_vars))
 
-    # --- Phase plots from toml ---
+    # --- Phase plots ---
     phase_cfgs = config.get("plots", {}).get("phase", [])
     if not phase_cfgs:
-        # Default phase plot logic - only use ODE variables, not derived ones
-        original_vars = [col for col in df.columns if col != time_var and col in config.get("variables", {}).get("names", [])]
+        original_vars = config.get("variables", {}).get("names", [])
         if len(original_vars) in (2, 3):
             phase_cfgs = [{"vars": original_vars}]
 
     for cfg in phase_cfgs:
         vars_ = cfg["vars"]
         aspect = cfg.get("aspect", [1.0] * len(vars_))
-
-        # Check if all variables exist
-        missing_phase_vars = [v for v in vars_ if v not in df.columns]
-        if missing_phase_vars:
-            print(f"Warning: Phase plot skipped - missing variables: {missing_phase_vars}")
+        if not all(v in df.columns for v in vars_):
             continue
-
         if len(vars_) == 2:
-            fig = plot_phase_2d(df, vars_[0], vars_[1], aspect)
+            ts_figs.append(plot_phase_2d(df, vars_[0], vars_[1], aspect))
         elif len(vars_) == 3:
-            fig = plot_phase_3d(df, vars_[0], vars_[1], vars_[2], aspect)
-        else:
-            print(f"Invalid phase plot config: {vars_}")
-            continue
+            ts_figs.append(plot_phase_3d(df, vars_[0], vars_[1], vars_[2], aspect))
 
-        figs.append(fig)
+    # --- Stability Analysis ---
+    stability_enabled = config.get("eigenvalues", {}).get("all", False)
+    eig_df = load_eigenvalues(model_name)
+    if stability_enabled and eig_df is not None:
+        stability_figs = generate_stability_figures(eig_df)
+        report_path = generate_stability_report_html(model_name, eig_df)
+        with open(report_path) as f:
+            markdown_report = f.read()
+    else:
+        markdown_report = (
+            "No stability analysis is available for this model.\n\n"
+            "To generate a stability analysis use this in your toml file:\n"
+            "<pre>\n[eigenvalues]\nall = true\n</pre>"
+        )
 
-    # --- Export each fig to HTML with black background patch ---
+    # --- Write HTML with Tabs ---
+    '''
+    Colours: 
+    #009f6b  is a pastel green (active tab)
+    #4997d0 is a nice muted celestialblue  (model title)
+    ##5072a7 more muted blue than dodgerblue (inactive tab) 
+
+
+    body {{ background-color: black; color: white; font-family: sans-serif; }}
+    .tab-buttons {{ display: flex; gap: 1em; margin-bottom: 1em; }}
+    .tab-buttons button {{ background-color: #5072a7; font-weight: bold; color: white; border: none; padding: 10px 20px; cursor: pointer; }}
+    .tab-buttons button.active {{ background-color: #009f6b ; }} 
+    .tab-content {{ display: none; }}
+    .tab-content.active {{ display: block; }}
+    .tab-content > div.plotly-graph-div {{
+        width: 90%;
+        margin: auto;
+    }}
+    pre {{ background-color: #222; padding: 1em; color: white; }}
+    '''
     html_path = os.path.join("models", f"{model_name}.html")
-    html_str = ""
-    plot_count = 0
     with open(html_path, "w") as f:
-        for fig in figs:
-            html_str = html_str + pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
-            plot_count += 1
-            if plot_count == 1:
-                html_str = html_str.replace("<head>",
-                                            f"<head><title>Model: {model_name}</title><style>body{{background-color:black;}}</style>"
-                                            )
-                html_str = html_str.replace("<body>",
-                                            f'<body>\n<h2 style="color:lightblue;">Model: {model_name}</h2>'
-                                            )
-        f.write(html_str)
-    
-    print(f"Note: Available variables: {list(df.columns)}")
-    print(f"HTML plot written to {html_path}")
+        f.write(f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Model: {model_name}</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {{
+        background-color: black;
+        color: white;
+        font-family: sans-serif;
+    }}
+    .tab-buttons {{
+        display: flex;
+        gap: 1em;
+        margin-bottom: 1em;
+    }}
+    .tab-buttons button {{
+        background-color: #5072a7;
+        font-weight: bold;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+    }}
+    .tab-buttons button.active {{
+        background-color: #009f6b;
+    }}
+    .tab-content {{
+        display: none;
+    }}
+    .tab-content.active {{
+        display: block;
+    }}
+    .plot-container {{
+        width: 90%;
+        margin: auto;
+    }}
+    pre {{
+        background-color: #222;
+        padding: 1em;
+        color: white;
+    }}
+    .markdown-report {{
+        padding: 1em;
+        background-color: #111;
+        color: #ddd;
+    }}
+  </style>
+</head>
+<body>
+  <div class="tab-buttons">
+    <button onclick="showTab('sim')" class="active">Sim Results</button>
+    <button onclick="showTab('stability')">Stability</button>
+  </div>
+  <h1 style="color: #4997d0">Model: {model_name}</h1>
+  <div id="sim" class="tab-content active">
+""")
+        # Add simulation figures
+        for fig in ts_figs:
+            #f.write(pio.to_html(fig, include_plotlyjs=False, full_html=False))
+            f.write('<div class="plot-container">\n')
+            f.write(pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True}))
+            f.write('</div>\n')
 
+        f.write("</div><div id=\"stability\" class=\"tab-content\">\n")
+
+        # Add stability figures and markdown
+        for fig in stability_figs:
+            #f.write(pio.to_html(fig, include_plotlyjs=False, full_html=False))
+            f.write('<div class="plot-container">\n')
+            f.write(pio.to_html(fig, include_plotlyjs=False, full_html=False, config={"responsive": True}))
+            f.write('</div>\n')
+
+        # Markdown report
+        f.write(f"<div class=\"markdown-report\">{markdown_report}</div>")
+
+        f.write("""
+  </div>
+  <script>
+    function showTab(id) {
+      document.querySelectorAll('.tab-buttons button').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelector(`.tab-buttons button[onclick="showTab('${id}')"]`).classList.add('active');
+      document.getElementById(id).classList.add('active');
+    }
+  </script>
+</body>
+</html>
+""")
+    print(f"HTML plot with tabs written to {html_path}")
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Generate interactive Plotly plots for a given model's simulation results.")
+    parser = argparse.ArgumentParser(description="Generate interactive Plotly plots for a model with stability tab.")
     parser.add_argument("model_name", help="The name of the model (e.g., 'pendulum').")
     args = parser.parse_args()
-    sys.argv = [sys.argv[0], args.model_name]
     main(args.model_name)

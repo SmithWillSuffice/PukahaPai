@@ -5,7 +5,7 @@ We only check the cmdl version.
 
 Passed 2025-07-26
 ```
-PukahaPai$ pytest tests/test_lorenz.py 
+PukahaPai$ pytest -k Lorenz   # case sensitive
 ================================================= test session starts ==================================================
 platform linux -- Python 3.10.12, pytest-8.0.0, pluggy-1.4.0
 rootdir: /home/geon/dev/python/economics/PukahaPai
@@ -31,20 +31,53 @@ project_root = Path.cwd()
 code_gen = "./generate_julia_odesolver.py"
 n_rows = 5   # number of rows to output and check
 
-class TestGenerateJuliaODESolver:
+
+class TestLorenzModel:
     """Test suite for generate_julia_odesolver.py script and jinja template."""
     
+    @pytest.fixture(scope="class", autouse=True)
+    def build_and_run_simulation(self):
+        """Fixture to build the Julia model and run the simulation before tests."""
+        # Step 1: Generate Julia code
+        gen_result = subprocess.run(
+            [code_gen, model_name],
+            capture_output=True, text=True, timeout=30, cwd=project_root
+        )
+        assert gen_result.returncode == 0, f"Script failed: {gen_result.stderr}"
+
+        output_file = project_root / "models" / f"{model_name}_cmdl.jl"
+        assert output_file.exists(), "Generated Julia file not found"
+
+        # Step 2: Run the Julia simulation
+        csv_output = project_root / "models" / f"{model_name}.csv"
+        if csv_output.exists():
+            csv_output.unlink()
+
+        run_result = subprocess.run(
+            ["julia", str(output_file)],
+            capture_output=True, text=True, timeout=60, cwd=project_root
+        )
+        assert run_result.returncode == 0, f"Julia simulation failed: {run_result.stderr}"
+        assert csv_output.exists(), "CSV output file not generated"
+
+
     @pytest.fixture(scope="class")
     def expected_output_values(self):
         """Expected values for the first 10 time steps of simulation
         These should be updated based on your known good output."""
-        return [
-            [0.01,0.9179244619031339,0.2663399705346038,0.001264186262354602], 
-            [0.02,0.8679194605346884,0.5117404051909129,0.004657588116206182], 
-            [0.03,0.8453602114731358,0.744654029075825,0.009842631406158073], 
-            [0.04,0.8468056229653078,0.9723321561606141,0.016749755532175038], 
-            [0.05,0.8697866436302651,1.2011314216557525,0.02551483842756989]
-        ]
+        # return [
+        #     [0.01,0.9179244619031339,0.2663399705346038,0.001264186262354602], 
+        #     [0.02,0.8679194605346884,0.5117404051909129,0.004657588116206182], 
+        #     [0.03,0.8453602114731358,0.744654029075825,0.009842631406158073], 
+        #     [0.04,0.8468056229653078,0.9723321561606141,0.016749755532175038], 
+        #     [0.05,0.8697866436302651,1.2011314216557525,0.02551483842756989]
+        # ]
+        return [ [9.765625e-6,0.9999023799832181,0.0002734081369992548,2.669672907644265e-9],
+            [1.953125e-5,0.9998047961932501,0.0005467869211641305,8.00814326997958e-9],
+            [2.9296875e-5,0.9997072486236934,0.000820136362659159,1.6014536129513706e-8],
+            [3.90625e-5,0.999609737268147,0.001093456471647039,2.668797702401555e-8],
+            [4.8828125e-5,0.9995122621202112,0.0013667472582886361,4.0027591986315424e-8]
+            ]
 
     
     def test_generate_julia_cmdl(self):

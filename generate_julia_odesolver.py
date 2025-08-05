@@ -19,7 +19,6 @@ as `./models/pendulum_cmdl.jl`.
 | Copyright: (c) 2025 Bijou M. Smith
 | License: GNU General Public License v3.0 <https://www.gnu.org/licenses/gpl-3.0.html>
 '''
-# FLAGGED - This is the final, corrected version of the Python script.
 
 from pathlib import Path
 import tomllib
@@ -96,15 +95,18 @@ def topological_sort(ode_equations: dict) -> list:
 
     return sorted_equations
 
+
 def render_template(template: str, context: dict) -> str:
     from jinja2 import Template
     return Template(template).render(**context)
+
 
 def substitute_expressions(expr: str, variable_names: list) -> str:
     """Substitutes derivative variable names."""
     for var in variable_names:
         expr = re.sub(rf'\bd{var}\b', f'd{var}_dt', expr)
     return expr
+
 
 def generate_julia_code(model_name: str, template: str, gui_version: bool = False):
     model_dir = Path("models")
@@ -158,8 +160,19 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     # Generate the list of boolean values for differential_vars
     differential_vars_list = ["true" for _ in variable_names]
 
+    # Detect if eigenvalue printing is requested
+    eigenvalue_config = config.get("eigenvalues", {})
+    eigenvalue_enabled = eigenvalue_config.get("all", False)
+    if eigenvalue_enabled:
+        use_callback_jacobian = eigenvalue_config.get("callback_jacobian", False)
+        use_forward_jacobian = eigenvalue_config.get("forward_jacobian", True)
+        eigenvalue_method = "callback" if use_callback_jacobian else "forward"
+    else:
+        eigenvalue_method = None
+
     context = {
-        "model_name": config["model_name"],
+        #"model_name": config["model_name"],   # No!!! Use the toml filename!
+        "model_name": model_name,
         "parameters": parameters,
         "variable_names": variable_names,
         "initial_conditions": init_vals,
@@ -172,6 +185,12 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
         "variable_count": len(variable_names),
         "differential_vars_list": differential_vars_list,
     }
+
+    # Add to context for template rendering
+    context.update({
+        "eigenvalue_enabled": eigenvalue_enabled,
+        "eigenvalue_method": eigenvalue_method,
+    })
 
     julia_code = render_template(template, context)
     outpath = model_dir / f"{model_name}{suffix}.jl"

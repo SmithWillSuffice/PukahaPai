@@ -7,6 +7,9 @@ using Mmap
 using Sockets
 using SharedArrays
 
+# Functions for getting eigenvalues (optional)
+
+
 # Auto-generated struct for shared memory interop
 struct pendulum_Shared
     state::UInt8
@@ -127,6 +130,7 @@ function main()
     # Callback for writing results to a file for GUI visualization
     # In a production GUI, this would write to shared memory.
     outfile = open("models/pendulum.csv", "w")
+    
     write(outfile, "t,theta,omega\n")
 
     step_callback = function (integrator)
@@ -142,11 +146,13 @@ function main()
         flush(outfile)
         return false
     end
-
+    
     cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+    
     sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
     close(outfile)
+    
     println("GUI simulation completed successfully")
 end
 
