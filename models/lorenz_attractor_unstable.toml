@@ -1,0 +1,58 @@
+model_name = "lorenz_attractor_unstable"
+# Deterministic local-instability test case for the Lorenz system.
+# The initial condition is exactly the origin, which is an equilibrium.
+# For rho > 1 the origin has one positive Jacobian eigenvalue, so this
+# trajectory stays at the equilibrium while the local stability test is
+# unambiguously unstable.
+
+[parameters]
+sigma = 10.0
+rho = 28.0
+beta = 2.6
+
+[limits.parameters.sigma]
+min = 0.0
+min_inclusive = false
+description = "Prandtl-like parameter sigma must be positive"
+
+[limits.parameters.rho]
+min = 0.0
+description = "Rayleigh-control parameter rho is nonnegative in this model"
+
+[limits.parameters.beta]
+min = 0.0
+min_inclusive = false
+description = "Geometric dissipation parameter beta must be positive"
+
+[variables]
+names = ["x", "y", "z"]
+
+[initial_conditions]
+x = 0.0
+y = 0.0
+z = 0.0
+
+[equations.auxiliary]
+
+[equations.ode]
+f_x = "sigma * (y - x)"
+f_y = "x * (rho - z) - y"
+f_z = "x * y - beta * z"
+
+[tspan]
+t0 = 0.0
+t1 = 10.0
+
+[solver]
+dt = 0.01
+method = "Tsit5"
+
+[plots]
+time_series = ["x", "y", "z"]
+
+[[plots.phase]]
+vars = ["x", "y", "z"]
+aspect = [1.0, 1.0, 1.0]
+
+[eigenvalues]
+all = true

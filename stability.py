@@ -15,11 +15,45 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
+STABILITY_TOL = 1.0e-10
+
+
 def load_eigenvalues(model_name):
     eig_csv = os.path.join("models", f"{model_name}_eigen.csv")
     if not os.path.exists(eig_csv):
         return None
-    return pd.read_csv(eig_csv, header=None)
+    # Generated eigenvalue CSV files contain a header row: t,e1,e2,...
+    return pd.read_csv(eig_csv)
+
+
+def residual_to_ode_jacobian(j_residual):
+    """
+    Convert the Jacobian of the DAE residual to the ODE Jacobian.
+
+    The generated residual is F(du, u, t) = du - f(u, t).  Holding du fixed,
+    dF/du = -df/du, hence J_ode = -J_residual.
+    """
+    return -np.asarray(j_residual)
+
+
+def max_real_eigenvalue(eigenvalues):
+    """Return max Re(lambda), ignoring values that cannot be parsed."""
+    vals = np.asarray([safe_complex(v) for v in eigenvalues], dtype=complex)
+    finite = np.isfinite(vals.real)
+    if not finite.any():
+        return float('nan')
+    return float(np.max(vals.real[finite]))
+
+
+def is_locally_stable(eigenvalues, tol=STABILITY_TOL):
+    """
+    Local linear stability test for one sampled Jacobian.
+
+    Returns True when every eigenvalue has real part <= tol.  This is a local
+    Jacobian criterion, not a global nonlinear-stability theorem.
+    """
+    m = max_real_eigenvalue(eigenvalues)
+    return np.isfinite(m) and m <= tol
 
 
 def safe_complex(x):
@@ -55,7 +89,7 @@ def generate_stability_figures(eig_df):
 
     eigvals = eig_df.iloc[:, 1:]
 
-    max_real = eigvals.apply(lambda row: max(row.apply(lambda x: safe_complex(x).real)), axis=1)
+    max_real = eigvals.apply(lambda row: max_real_eigenvalue(row.values), axis=1)
 
     # 1. Max Re(λ)
     fig_max_real = go.Figure()
@@ -134,7 +168,7 @@ def generate_stability_report_md(model_name, eig_df):
     t = t_raw.apply(safe_float)
     
     # Compute max real part of eigenvalues at each timestep
-    max_real = eigvals.apply(lambda row: max(row.apply(lambda x: safe_complex(x).real)), axis=1)
+    max_real = eigvals.apply(lambda row: max_real_eigenvalue(row.values), axis=1)
     
     report_lines = [
         f"# Stability Analysis for Model: `{model_name}`",
@@ -145,13 +179,13 @@ def generate_stability_report_md(model_name, eig_df):
         ""
     ]
     
-    if (max_real <= 0).all():
+    if (max_real <= STABILITY_TOL).all():
         report_lines += [
-            "## ✅ The system remained stable throughout the entire simulation.",
-            "All eigenvalues had negative real parts for the full duration."
+            "## ✅ Local Jacobian stability criterion satisfied throughout the sampled trajectory.",
+            "All sampled Jacobian eigenvalues had non-positive real parts within numerical tolerance."
         ]
     else:
-        unstable_mask = max_real > 0
+        unstable_mask = max_real > STABILITY_TOL
         unstable_times = t[unstable_mask]
         max_instability = max_real[unstable_mask]
         worst_index = max_instability.idxmax()
@@ -173,7 +207,7 @@ def generate_stability_report_md(model_name, eig_df):
             unstable_intervals.append((start, t.iloc[-1]))
         
         report_lines += [
-            "## ⚠️ Instability Detected",
+            "## ⚠️ Local Linear Instability Detected",
             f"The system became unstable at **{len(unstable_times)}** time steps.",
             f"The worst instability occurred at $t = {worst_time:.3f}$ with $\\max\\ \\Re(\\lambda) = {worst_value:.3f}$.",
             "",
@@ -207,7 +241,7 @@ def generate_stability_report_html(model_name, eig_df):
     eigvals = eig_df.iloc[:, 1:]
     
     t = t_raw.apply(safe_float)
-    max_real = eigvals.apply(lambda row: max(row.apply(lambda x: safe_complex(x).real)), axis=1)
+    max_real = eigvals.apply(lambda row: max_real_eigenvalue(row.values), axis=1)
     
     html_lines = []
     
@@ -216,11 +250,11 @@ def generate_stability_report_html(model_name, eig_df):
     html_lines.append(f"<p><strong>Number of time steps:</strong> {len(t)}</p>")
     html_lines.append(f"<p><strong>Number of eigenvalues per timestep:</strong> {eigvals.shape[1]}</p>")
     
-    if (max_real <= 0).all():
-        html_lines.append("<h3 style='color: green;'>✅ The system remained stable throughout the entire simulation.</h3>")
-        html_lines.append("<p>All eigenvalues had negative real parts for the full duration.</p>")
+    if (max_real <= STABILITY_TOL).all():
+        html_lines.append("<h3 style='color: green;'>✅ Local Jacobian stability criterion satisfied throughout the sampled trajectory.</h3>")
+        html_lines.append("<p>All sampled Jacobian eigenvalues had non-positive real parts within numerical tolerance.</p>")
     else:
-        unstable_mask = max_real > 0
+        unstable_mask = max_real > STABILITY_TOL
         unstable_times = t[unstable_mask]
         max_instability = max_real[unstable_mask]
         worst_index = max_instability.idxmax()
@@ -241,7 +275,7 @@ def generate_stability_report_html(model_name, eig_df):
         if start is not None:
             unstable_intervals.append((start, t.iloc[-1]))
         
-        html_lines.append("<h3 style='color: orange;'>⚠️ Instability Detected</h3>")
+        html_lines.append("<h3 style='color: orange;'>⚠️ Local Linear Instability Detected</h3>")
         html_lines.append(f"<p>The system became unstable at <strong>{len(unstable_times)}</strong> time steps.</p>")
         html_lines.append(f"<p>The worst instability occurred at <strong>t = {worst_time:.3f}</strong> with <strong>max Re(λ) = {worst_value:.3f}</strong>.</p>")
         
@@ -271,5 +305,16 @@ def generate_stability_report_html(model_name, eig_df):
 
 
 # Export functions for use in plots4models.py
-__all__ = ["load_eigenvalues", "generate_stability_figures", "generate_stability_report_html", ]
+__all__ = [
+    "STABILITY_TOL",
+    "load_eigenvalues",
+    "safe_complex",
+    "safe_float",
+    "residual_to_ode_jacobian",
+    "max_real_eigenvalue",
+    "is_locally_stable",
+    "generate_stability_figures",
+    "generate_stability_report_md",
+    "generate_stability_report_html",
+]
 

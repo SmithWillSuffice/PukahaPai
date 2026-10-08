@@ -17,13 +17,17 @@ function compute_jacobian_and_eigenvals(integrator)
     p = integrator.p
     t = integrator.t
 
-    J = ForwardDiff.jacobian(u_var -> begin
+    # dae! defines the residual F(du,u,t) = du - f(u,t).
+    # Holding du fixed therefore gives dF/du = -df/du.
+    # Linear stability of the ODE is determined by df/du, hence the minus sign.
+    J_residual = ForwardDiff.jacobian(u_var -> begin
         tmp = similar(u_var)
         dae!(tmp, du, u_var, p, t)
         return tmp
     end, u)
 
-    return eigvals(J)
+    J_ode = -J_residual
+    return eigvals(J_ode)
 end
 
 function stability_callback(integrator)
@@ -154,7 +158,7 @@ function main()
     outfile = open("models/{{ model_name }}.csv", "w")
     {% if eigenvalue_enabled %}
     eigen_outfile = open("models/{{ model_name }}_eigen.csv", "w")
-    write(eigen_outfile, "t,e1,e2,e3,...\n")  # you may tailor this line manually
+    write(eigen_outfile, "t{% for i in range(1, variable_count + 1) %},e{{ i }}{% endfor %}\n")
     {% endif %}
     write(outfile, "t,{{ variable_names | join(",") }}\n")
 

@@ -52,3 +52,6 @@ time_series = ["theta", "omega"]
 vars = ["theta", "omega"]      # 2D plot
 aspect = [1.0, 1.0]        # Optional: scaling for x:y
 
+
+[eigenvalues]
+all = true

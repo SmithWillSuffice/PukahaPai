@@ -6,17 +6,9 @@ We only check the cmdl version.
 Passed 2025-07-26
 ```
 PukahaPai$ pytest -k Lorenz   # case sensitive
-================================================= test session starts ==================================================
-platform linux -- Python 3.10.12, pytest-8.0.0, pluggy-1.4.0
-rootdir: /home/geon/dev/python/economics/PukahaPai
-plugins: anyio-4.2.0
-collected 4 items                                                                                                      
-
-tests/test_lorenz.py ....                                                                                        [100%]
-
-================================================== 4 passed in 8.45s ===================================================
+...                                                                                        [100%]
+========== 4 passed in 8.45s ============
 ```
-
 
 | Copyright © 2025, Bijou M. Smith
 | License: GNU General Public License v3.0  <https://www.gnu.org/licenses/gpl-3.0.html>
