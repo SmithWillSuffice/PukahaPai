@@ -10,7 +10,11 @@ PukahaPai ODE model plotting tools. For use in ./plots4models.py
 '''
 
 import os
-import toml
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python <= 3.10
+    tomllib = None
+    import toml
 import numpy as np
 import plotly.graph_objects as go
 import re
@@ -20,7 +24,10 @@ def load_config(model_name):
     config_path = os.path.join("models", f"{model_name}.toml")
     if not os.path.exists(config_path):
         return {}
-    return toml.load(config_path)
+    if tomllib is None:
+        return toml.load(config_path)
+    with open(config_path, "rb") as f:
+        return tomllib.load(f)
 
 
 def convert_julia_to_python(expression, parameters):
@@ -377,17 +384,16 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
             # zerolinewidth=1
         ),
         yaxis=dict(
-            title=var1,
+            title=dict(text=var1, font=dict(color=color1)),
             color=color1,
             gridcolor='rgba(100,100,100,0.3)',
             zeroline=True,
             zerolinecolor=faint1,
             zerolinewidth=1,
-            titlefont=dict(color=color1),
             tickfont=dict(color=color1)
         ),
         yaxis2=dict(
-            title=var2,
+            title=dict(text=var2, font=dict(color=color2)),
             color=color2,
             overlaying='y',
             side='right',
@@ -395,7 +401,6 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
             zeroline=True,
             zerolinecolor=faint2,
             zerolinewidth=1,
-            titlefont=dict(color=color2),
             tickfont=dict(color=color2)
         )
     )

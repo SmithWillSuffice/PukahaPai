@@ -56,3 +56,8 @@ aspect = [1.0, 1.0, 1.0]
 
 [eigenvalues]
 all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 0.0

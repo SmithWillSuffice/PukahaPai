@@ -5,6 +5,7 @@ sigma = 10.0
 rho = 28.0
 beta = 2.6
 
+
 # Physical Lorenz-convection parameter domain. The mathematical ODEs can be
 # extended outside this domain, but this saved model is intended to represent
 # the standard convection interpretation.
@@ -53,3 +54,11 @@ method = "Tsit5"
 vars = ["x", "y", "z"]
 aspect = [1.0, 1.0, 1.0]
 
+
+[eigenvalues]
+all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 5.0

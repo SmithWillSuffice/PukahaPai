@@ -1,64 +1,70 @@
 model_name = "mmm_0_1"
-# Closed circuit model, no price ODE, no debt.
-# K, N, A are decoupled --- can be derived as f(t) in post-processing.
+# Early closed private-sector prototype.
+# Price, debt, wage-share and employment-rate ODEs are explicit.
+# N and A are derived from time; K is an auxiliary diagnostic.
 
 [parameters]
-N0 = 100.0      # Total labor force t=0
-K0 = 100.0     # Total capital t=0
-c_u = 0.9      # wage share response to wage share level
-nu = 2.5       # Capital-output ratio (Y = K / nu)
-alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
-beta = 0.01     # population growth rate
-id = 0.03      # Bank spread above govt rate
+N0 = 100.0       # Total labor force t=0
+A0 = 1.0         # Initial productivity
+K0 = 100.0       # Reference capital stock t=0 (currently unused)
+c_u = 0.9        # Wage-share response coefficient
+nu = 2.5         # Capital-output ratio
+alpha = 0.02     # Productivity growth
+beta = 0.01      # Population growth
+id = 0.03        # Bank interest/spread parameter used in firm profit
 monopoly = 0.2   # Markup percentage on firm costs
-s = 0.2          # Savings desires
-Phi_d = 0.05       # Phillips multiplier
-Phi_c = 1.0        # Phillips offset
-gamma_p = 2.0      # Phillips exponent
-deprec = 0.05     # Capital depreciation constant
+s = 0.2          # Savings desire (currently unused)
+Phi_d = 0.05     # Phillips multiplier
+Phi_c = 1.0      # Phillips offset
+gamma_p = 2.0    # Phillips exponent
+deprec = 0.05    # Capital depreciation constant
+tau_P = 0.1      # Price adjustment speed
+
 # Investment response parameters: power law
 ai = 0.05
 bi = 0.05
 ci = 1.75
 di = 0.0
-gamma_i = 2.0  # Investment exponent
+gamma_i = 2.0
 
 [variables]
 names = ["P", "D", "u_s", "lambda"]
 
 [initial_conditions]
+# Keep this order aligned with [variables].names for the current generator.
 P = 1.0
 D = 50.0
-u = 0.6
+u_s = 0.6
 lambda = 0.9
 
 [equations.auxiliary]
 A = "A0 * exp(alpha * t)"
 N = "N0 * exp(beta * t)"
 Yr = "lambda * A * N"
-Y = "Y * P"
-K = "nu * Y"    # not used?
-# Main Response Functions
-# Phillips curve
+Y = "Yr * P"
+L = "lambda * N"
+K = "nu * Y"
+
+# Main response functions
 Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
-# Capital grow model
 Gamma = "(1 - u_s)/nu - deprec"
-# Profit equation - use nominal Y
-#Pi = "Y - w*L - ib * D"
-Pi = "Y - u_s*A*L - ib * D"
+
+# Profit equation using nominal output and the existing interest parameter.
+Pi = "Y - u_s*A*L - id*D"
 pi = "Pi/K"
+
 # Investment curve
 Inv = "ai / (bi + ci * pi)^gamma_i - di"
 
 [equations.ode]
-# Price is cost + markup
+# Price is cost + markup.
 f_P = "tau_P * (u_s/(1 - monopoly) - P)"
-# Debt is investment less Profit
+# Debt is investment less profit.
 f_D = "Inv - Pi"
-# Wage increases if labor market tight (small Phi)
-f_u_s = "u * (Phi - c_u)"       
-# Adjust employment rate toward output-labor ratio
-f_lambda = "lambda * ( Gamma - alpha - beta )"  
+# Wage share responds to labour-market pressure.
+f_u_s = "u_s * (Phi - c_u)"
+# Employment rate follows the output/labour growth balance.
+f_lambda = "lambda * (Gamma - alpha - beta)"
 
 [tspan]
 t0 = 0.0
@@ -68,3 +74,14 @@ t1 = 50.0
 dt = 0.1
 method = "Tsit5"
 
+[plots]
+time_series = ["P", "D", "u_s", "lambda"]
+combine_stability_lyapunov_plots = false
+
+[eigenvalues]
+all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 5.0

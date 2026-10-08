@@ -1,37 +1,39 @@
 model_name = "mmm_0_2"
-# Firms with monopoly, price ODE included, no government.
-# K, N, A are decoupled --- can be derived as f(t) in post-processing.
-# For LaTeX diagnostic viewing I use underscores for ind_ices and Greek.
+# Firms with monopoly pricing and a simple fiscal flow.
+# K, N and A are auxiliary quantities derived from the dynamic state.
+# For LaTeX diagnostic viewing underscores denote indices and Greek symbols.
 
 [parameters]
-N0 = 100.0      # Total labor force t=0
-A0 = 1.0       # Initial productivity
-alpha = 0.02   # Productivity growth (A = A0 * exp(alpha * t))
-beta = 0.01     # population growth rate
-K0 = 100.0      # Total capital t=0
-nu = 2.5        # Capital-output ratio (Y = K / nu)
-tau_P = 0.1    # Price adjustment speed
-c_G = 0.3        # Government spending factor or 'output share'
-i_G = 0.03       # Gov policy rate
-r_T = 0.3        # effective equivalent flat tax rate
+N0 = 100.0       # Total labor force t=0
+A0 = 1.0         # Initial productivity
+alpha = 0.02     # Productivity growth
+beta = 0.01      # Population growth rate
+K0 = 100.0       # Reference capital stock t=0 (currently unused)
+nu = 2.5         # Capital-output ratio
+tau_P = 0.1      # Price adjustment speed
+c_G = 0.3        # Government spending factor / output share
+i_G = 0.03       # Government policy rate
+r_T = 0.3        # Effective equivalent flat tax rate
 monopoly = 0.2   # Markup percentage on firm costs
-s = 0.2          # Savings desires
+s = 0.2          # Savings desire (currently unused)
 Phi_d = 0.05     # Phillips multiplier
 Phi_c = 1.0      # Phillips offset
 gamma_p = 2.0    # Phillips exponent
-varpi = 0.1    # wage share response to employment
-deprec = 0.05    # Capital deprec_iation constant
+varpi = 0.1      # Wage-share response to employment
+deprec = 0.05    # Capital depreciation constant
+
 # Investment response parameters: power law
 a_i = 0.05
 b_i = 0.05
 c_i = 1.75
 d_i = 0.0
-gamma_i = 2.0  # Investment exponent
+gamma_i = 2.0
 
 [variables]
 names = ["P", "D", "u_s", "lambda"]
 
 [initial_conditions]
+# Keep this order aligned with [variables].names for the current generator.
 P = 1.0
 D = 50.0
 u_s = 0.6
@@ -43,32 +45,33 @@ N = "N0 * exp(beta * t)"
 Yr = "lambda * A * N"
 Y = "Yr * P"
 L = "lambda * N"
-K = "nu * Y"    # not used?
+K = "nu * Y"
+
 # Fiscal functions
 G = "c_G * Y"
 T = "r_T * Y"
-# Main Response Functions
-# Phillips curve
+
+# Main response functions
 Phi = "Phi_d/(1 - lambda)^gamma_p - Phi_c"
-# Capital grow model
 Gamma = "(1 - u_s)/nu - deprec"
-# Profit equation - use nominal Y
-# but here it is interest income, not NG debt
-Pi = "Y - u_s*A*L + i_G * D"
+
+# Profit equation; here D carries interest income rather than NG government debt.
+Pi = "Y - u_s*A*L + i_G*D"
 pi = "Pi/K"
+
 # Investment curve
 Inv = "a_i / (b_i + c_i * pi)^gamma_i - d_i"
 S = "G - T + Inv * Y"
 
 [equations.ode]
-# Price is cost + markup
+# Price is cost + markup.
 f_P = "tau_P * (u_s/(1 - monopoly) - P)"
-# Debt is investment less Profit
-f_D = "G - T"       
-# Adjust employment rate toward output-labor ratio
-f_lambda = "lambda * ( Gamma - deprec - alpha - beta )"  
-# Wage increases if labor market tight (small Phi)
-f_u_s = "u_s * (Phi + varpi * f_lambda / lambda  + f_P / P - alpha)"
+# Debt/fiscal balance.
+f_D = "G - T"
+# Adjust employment rate toward output-labour balance.
+f_lambda = "lambda * (Gamma - deprec - alpha - beta)"
+# Wage share responds to labour-market pressure and price/employment dynamics.
+f_u_s = "u_s * (Phi + varpi * f_lambda / lambda + f_P / P - alpha)"
 
 [tspan]
 t0 = 0.0
@@ -79,11 +82,14 @@ dt = 0.1
 method = "Tsit5"
 
 [plots]
-# Optional: restrict which time series to show (omit to show all)
-time_series = ["P", "D", "lambda", "u_s", "Y"]
-
+# Only state variables are written to the main solver CSV.
+time_series = ["P", "D", "lambda", "u_s"]
+combine_stability_lyapunov_plots = false
 
 [eigenvalues]
 all = true
 
-
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 5.0

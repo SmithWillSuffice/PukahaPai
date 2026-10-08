@@ -160,7 +160,7 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     # Generate the list of boolean values for differential_vars
     differential_vars_list = ["true" for _ in variable_names]
 
-    # Detect if eigenvalue printing is requested
+    # Optional local-stability and Lyapunov diagnostics.
     eigenvalue_config = config.get("eigenvalues", {})
     eigenvalue_enabled = eigenvalue_config.get("all", False)
     if eigenvalue_enabled:
@@ -169,6 +169,19 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
         eigenvalue_method = "callback" if use_callback_jacobian else "forward"
     else:
         eigenvalue_method = None
+
+    lyapunov_config = config.get("lyapunov", {})
+    lyapunov_enabled = bool(lyapunov_config.get("enabled", False))
+    lyapunov_renormalize_dt = float(lyapunov_config.get("renormalize_dt", max(dt, 0.1)))
+    lyapunov_transient = float(lyapunov_config.get("transient", 0.0))
+
+    if lyapunov_enabled and lyapunov_renormalize_dt <= 0.0:
+        raise ValueError("[lyapunov].renormalize_dt must be > 0")
+    if lyapunov_enabled and lyapunov_transient < 0.0:
+        raise ValueError("[lyapunov].transient must be >= 0")
+
+    # Both diagnostics use the same correctly signed ODE Jacobian.
+    jacobian_enabled = eigenvalue_enabled or lyapunov_enabled
 
     context = {
         #"model_name": config["model_name"],   # No!!! Use the toml filename!
@@ -190,6 +203,10 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     context.update({
         "eigenvalue_enabled": eigenvalue_enabled,
         "eigenvalue_method": eigenvalue_method,
+        "lyapunov_enabled": lyapunov_enabled,
+        "lyapunov_renormalize_dt": lyapunov_renormalize_dt,
+        "lyapunov_transient": lyapunov_transient,
+        "jacobian_enabled": jacobian_enabled,
     })
 
     julia_code = render_template(template, context)

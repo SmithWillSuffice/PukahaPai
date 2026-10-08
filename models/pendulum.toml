@@ -42,6 +42,7 @@ dt = 0.01
 method = "Tsit5"  # or "DP5", "RK4", "Rodas5", etc.
 
 [plots]
+combine_stability_lyapunov_plots = false
 
 # Optional: restrict which time series to show (omit to show all)
 time_series = ["theta", "omega"]
@@ -55,3 +56,8 @@ aspect = [1.0, 1.0]        # Optional: scaling for x:y
 
 [eigenvalues]
 all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 20.0

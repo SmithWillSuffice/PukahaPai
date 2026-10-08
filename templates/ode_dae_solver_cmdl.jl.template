@@ -3,19 +3,17 @@
 
 using DifferentialEquations
 using Sundials  # For IDA solver
-{% if eigenvalue_enabled %}
+{% if jacobian_enabled %}
 using LinearAlgebra, ForwardDiff
 
-
-function compute_jacobian_and_eigenvals(integrator)
+function compute_ode_jacobian(integrator)
     u = integrator.u
     du = integrator.du
     p = integrator.p
     t = integrator.t
 
-    # dae! defines the residual F(du,u,t) = du - f(u,t).
-    # Holding du fixed therefore gives dF/du = -df/du.
-    # Linear stability of the ODE is determined by df/du, hence the minus sign.
+    # dae! defines F(du,u,t) = du - f(u,t).
+    # Holding du fixed gives dF/du = -df/du, hence J_ode = -J_residual.
     J_residual = ForwardDiff.jacobian(u_var -> begin
         tmp = similar(u_var)
         dae!(tmp, du, u_var, p, t)
@@ -23,30 +21,94 @@ function compute_jacobian_and_eigenvals(integrator)
     end, u)
 
     J_ode = -J_residual
-    return eigvals(J_ode)
-end
-
-
-function stability_callback(integrator)
-    if integrator.iter % 50 == 0
-        eigs = compute_jacobian_and_eigenvals(integrator)
-        max_real = maximum(real.(eigs))
-        if max_real > 0
-            println("Unstable at t=$(integrator.t), max eigenvalue real part: $max_real")
-        end
-        if isopen(eigen_outfile)
-            write(eigen_outfile, string(integrator.t))
-            for val in eigs
-                write(eigen_outfile, "," * string(val))
-            end
-            write(eigen_outfile, "\n")
-            flush(eigen_outfile)
-        end
-    end
-    return false
+    return J_ode
 end
 {% endif %}
 
+{% if eigenvalue_enabled %}
+function compute_jacobian_and_eigenvals(integrator)
+    J_ode = compute_ode_jacobian(integrator)
+    return eigvals(J_ode)
+end
+{% endif %}
+
+{% if lyapunov_enabled %}
+mutable struct LargestLyapunovState
+    v::Vector{Float64}
+    log_sum::Float64
+    elapsed::Float64
+    since_renormalize::Float64
+    last_t::Float64
+    started::Bool
+end
+
+function make_largest_lyapunov_state(n, t_start)
+    v = ones(Float64, n)
+    v ./= norm(v)
+    return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
+    t = Float64(integrator.t)
+    analysis_start = t0 + transient
+
+    if !state.started
+        if t < analysis_start
+            state.last_t = t
+            return false
+        end
+        state.v .= 1.0
+        state.v ./= norm(state.v)
+        state.log_sum = 0.0
+        state.elapsed = 0.0
+        state.since_renormalize = 0.0
+        state.last_t = t
+        state.started = true
+        return false
+    end
+
+    delta_t = t - state.last_t
+    if delta_t <= 0.0
+        return false
+    end
+
+    # Piecewise-constant propagation of the tangent equation dv/dt = J(t)v.
+    # The matrix exponential is considerably more accurate than one Euler step
+    # while keeping the Lyapunov diagnostic independent of the state integrator.
+    J = compute_ode_jacobian(integrator)
+    state.v .= exp(J * delta_t) * state.v
+    state.elapsed += delta_t
+    state.since_renormalize += delta_t
+    state.last_t = t
+
+    if state.since_renormalize + eps(Float64) >= renormalize_dt
+        stretch = norm(state.v)
+        if isfinite(stretch) && stretch > 0.0
+            state.log_sum += log(stretch)
+            state.v ./= stretch
+            lambda_max = state.log_sum / state.elapsed
+            write(outfile, "$(t),$(lambda_max)\n")
+            flush(outfile)
+        end
+        state.since_renormalize = 0.0
+    end
+
+    return false
+end
+
+function finalize_largest_lyapunov!(state, outfile)
+    if !state.started || state.elapsed <= 0.0 || state.since_renormalize <= eps(Float64)
+        return
+    end
+
+    stretch = norm(state.v)
+    if isfinite(stretch) && stretch > 0.0
+        lambda_max = (state.log_sum + log(stretch)) / state.elapsed
+        write(outfile, "$(state.last_t),$(lambda_max)\n")
+        flush(outfile)
+    end
+end
+{% endif %}
 
 # Parameters
 {% for name, value in parameters.items() %}
@@ -96,21 +158,27 @@ du0 = zeros({{ variable_count }})
 
 # Problem setup
 tspan = (t0, t1)
-# The IDA solver requires the `differential_vars` argument to specify which
-# variables are differential (true) and which are algebraic (false).
-# This assumes all variables are differential.
-prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [{{ differential_vars_list | join(", ") }}])
+prob = DAEProblem(
+    dae!, du0, u0, tspan,
+    differential_vars = [{{ differential_vars_list | join(", ") }}]
+)
 
-# Output file
+# Output files
 outfile = open("models/{{ model_name }}.csv", "w")
+write(outfile, "t,{{ variable_names | join(",") }}\n")
+
 {% if eigenvalue_enabled %}
 eigen_outfile = open("models/{{ model_name }}_eigen.csv", "w")
 write(eigen_outfile, "t{% for i in range(1, variable_count + 1) %},e{{ i }}{% endfor %}\n")
 {% endif %}
 
-write(outfile, "t,{{ variable_names | join(",") }}\n")
+{% if lyapunov_enabled %}
+lyapunov_outfile = open("models/{{ model_name }}_lyapunov.csv", "w")
+write(lyapunov_outfile, "t,lambda_max\n")
+lyapunov_state = make_largest_lyapunov_state({{ variable_count }}, t0)
+{% endif %}
 
-# Callback for writing results
+# Callback for writing state results
 step_callback = function (integrator)
     t = integrator.t
     y = integrator.u
@@ -124,19 +192,62 @@ step_callback = function (integrator)
 end
 
 {% if eigenvalue_enabled %}
-cb = CallbackSet(
-    DiscreteCallback((f,t,integrator)->true, step_callback),
-    DiscreteCallback((f,t,integrator)->true, stability_callback)
-)
-{% else %}
-cb = DiscreteCallback((f,t,integrator)->true, step_callback)
+stability_callback = function (integrator)
+    if integrator.iter % 50 == 0
+        eigs = compute_jacobian_and_eigenvals(integrator)
+        max_real = maximum(real.(eigs))
+        if max_real > 0
+            println("Locally unstable at t=$(integrator.t), max eigenvalue real part: $max_real")
+        end
+        if isopen(eigen_outfile)
+            write(eigen_outfile, string(integrator.t))
+            for val in eigs
+                write(eigen_outfile, "," * string(val))
+            end
+            write(eigen_outfile, "\n")
+            flush(eigen_outfile)
+        end
+    end
+    return false
+end
 {% endif %}
+
+{% if lyapunov_enabled %}
+lyapunov_callback = function (integrator)
+    return update_largest_lyapunov!(
+        integrator,
+        lyapunov_state,
+        lyapunov_outfile;
+        transient={{ lyapunov_transient }},
+        renormalize_dt={{ lyapunov_renormalize_dt }},
+    )
+end
+{% endif %}
+
+callbacks = Any[
+    DiscreteCallback((u,t,integrator)->true, step_callback),
+]
+{% if eigenvalue_enabled %}
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback))
+{% endif %}
+{% if lyapunov_enabled %}
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback))
+{% endif %}
+cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
+
 # Solve the DAE
 sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+
+{% if lyapunov_enabled %}
+finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
+{% endif %}
 
 # Cleanup
 close(outfile)
 {% if eigenvalue_enabled %}
 close(eigen_outfile)
+{% endif %}
+{% if lyapunov_enabled %}
+close(lyapunov_outfile)
 {% endif %}
 println("Simulation completed successfully")
