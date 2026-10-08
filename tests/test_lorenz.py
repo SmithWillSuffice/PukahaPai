@@ -1,4 +1,4 @@
-#~/usr/bin/env python3
+#!/usr/bin/env python3
 '''
 Unit test for the Lorenz Attractor ODEs.
 We only check the cmdl version.

@@ -17,7 +17,7 @@ import toml
 import pandas as pd
 import subprocess
 from pathlib import Path
-import re
+from latex_utils import latex_expression, latex_identifier
 
 DOCS_DIR = Path('./docs')
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,26 +62,9 @@ def write_markdown(df, out_path):
         f.write(df.to_markdown(index=False))
 
 
-def latex_symbol_subs(expr: str, cdots=False ) -> str:
-    subs = {
-        'lambda': r'\\lambda',
-        'alpha': r'\\alpha',
-        'beta': r'\\beta',
-        'theta': r'\\theta',
-        'pi': r'\\pi',
-        'gamma': r'\\gamma',
-    }
-
-    # First pass: safe substitutions using word boundaries
-    for k, v in subs.items():
-        expr = re.sub(rf'\b{re.escape(k)}\b', v, expr)
-
-    # Second pass: convert remaining * into \cdot
-    expr = expr.replace('*', r'\cdot ')
-    if not cdots:
-        expr = expr.replace(r'\cdot', r' ')
-
-    return expr
+def latex_symbol_subs(expr: str, cdots=False) -> str:
+    """Backward-compatible wrapper around the shared LaTeX formatter."""
+    return latex_expression(expr, cdots=cdots)
 
 
 def write_tex(df, model_name):
@@ -93,7 +76,7 @@ def write_tex(df, model_name):
     def texify_header(header):
         if header == 'Description':
             return 'Description'
-        return f"${header}$"  # Use math mode for account headers like F_D
+        return f"${latex_identifier(header)}$"  # Math-mode account header
 
     headers = [texify_header(col) for col in df.columns]
     rows = []

@@ -167,77 +167,22 @@ import os
 import argparse
 import toml
 import subprocess
-import re
-
-SUBS_DICT = {
-    'varphi': r'\varphi',
-    'alpha': r'\alpha',
-    'lambda': r'\lambda',
-    'Pi': r'\Pi',
-    'P': r'P',
-    'P_init': r'P_0',
-    'nu': r'\nu',
-    'Phi': r'\Phi',
-    'phi': r'\phi',
-    'gamma': r'\gamma',
-    'employment_gap': r'\Delta\lambda',
-    '1.0': r'1',
-    'productive_Y': r'Y_r',
-    'jg_output': r'Y_j',
-    'u': r'u',
-    'u_init': r'u_0',
-    'omega': r'\omega',
-    'jg_wage': r'w_j',
-    'phi0': r'\phi_0',
-}
-
-def tex_escape(s):
-    return s.replace('_', r'\_')
-
+from latex_utils import (
+    SUBS_DICT,
+    latex_expression,
+    latex_identifier,
+    latex_ode_lhs,
+    tex_escape,
+)
 
 def substitute_symbols(expr, dotted=False):
-    # First handle f_variable references in RHS expressions
-    def repl_f_var(match):
-        var = match.group(1)
-        symbol = SUBS_DICT.get(var, var)
-        return f"\\dot{{{symbol}}}" if dotted else f"\\frac{{d{symbol}}}{{dt}}"
-    
-    # Replace f_variable patterns in the expression
-    expr = re.sub(r'f_(\w+)', repl_f_var, expr)
-    
-    # Now replace other symbols first
-    for key, val in sorted(SUBS_DICT.items(), key=lambda x: -len(x[0])):
-        # Use word boundaries to avoid partial matches
-        pattern = r'\b' + re.escape(key) + r'\b'
-        # Escape backslashes in replacement string for regex
-        escaped_val = val.replace('\\', '\\\\')
-        expr = re.sub(pattern, escaped_val, expr)
-    
-    # Replace all multiplication patterns after symbol substitution
-    expr = re.sub(r'\*\s*\(', r' \\cdot (', expr)  # * ( -> \cdot (
-    expr = re.sub(r'\)\s*\*\s*([A-Za-z\\\\])', r') \\cdot \1', expr)  # ) * letter/fraction -> ) \cdot letter/fraction
-    expr = re.sub(r'([A-Za-z])\s*\*\s*([A-Za-z\\\\])', r'\1 \\cdot \2', expr)  # letter * letter/fraction -> letter \cdot letter/fraction
-    expr = re.sub(r'([A-Za-z])\s*\*\s*\\\\frac', r'\1 \\cdot \\\\frac', expr)  # letter * \frac -> letter \cdot \frac
-    expr = re.sub(r'\)\s*\*\s*\\\\frac', r') \\cdot \\\\frac', expr)  # ) * \frac -> ) \cdot \frac
-    
-    # Remove any remaining standalone * operators
-    expr = re.sub(r'\s*\*\s*', r' ', expr)
-    
-    # Sanity check: fix double backslashes that aren't newline commands
-    # This handles cases where our regex escaping created \\lambda instead of \lambda
-    expr = re.sub(r'\\\\(?!\\)', r'\\', expr)  # Replace \\ with \ but not \\\
-    
-    return expr
+    """Backward-compatible wrapper around the shared LaTeX formatter."""
+    return latex_expression(expr, dotted=dotted, cdots=True)
 
 
 def ode_lhs_tex(var, dotted=False):
-    if var.startswith("f_"):
-        var_name = var[2:]  # Remove 'f_' prefix
-        symbol = SUBS_DICT.get(var_name, var_name)
-        return f"\\dot{{{symbol}}}" if dotted else f"\\frac{{d{symbol}}}{{dt}}"
-    # For non-ODE variables, apply symbol substitution but don't escape underscores
-    symbol = SUBS_DICT.get(var, var)
-    return symbol
+    """Backward-compatible wrapper for ODE left-hand-side formatting."""
+    return latex_ode_lhs(var, dotted=dotted)
 
 
 def generate_table(title, data):
@@ -251,7 +196,7 @@ def generate_table(title, data):
     data_list = list(data.items())
     for i, (k, v) in enumerate(data_list):
         name = tex_escape(k)
-        symbol = SUBS_DICT.get(k, k)
+        symbol = latex_identifier(k)
         # Add \\ only if not the last row
         ending = r' \\' if i < len(data_list) - 1 else ''
         lines.append(f"{name} & ${symbol}$ & {v}{ending}")
