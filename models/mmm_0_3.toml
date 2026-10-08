@@ -1,5 +1,5 @@
 model_name = "mmm_0_3"
-# Closed circuit model, no price ODE, no debt.
+# Government sector included, Prices ODE included, no JG.
 # K, N, A are decoupled --- can be derived as f(t) in post-processing.
 
 [parameters]

@@ -1,7 +1,7 @@
 model_name = "mmm_0_2"
-# Closed circuit model, no price ODE, no debt.
+# Firms with monopoly, price ODE included, no government.
 # K, N, A are decoupled --- can be derived as f(t) in post-processing.
-# For LaTeX d_iagnostic viewing I use underscores for ind_ices and Greek.
+# For LaTeX diagnostic viewing I use underscores for ind_ices and Greek.
 
 [parameters]
 N0 = 100.0      # Total labor force t=0

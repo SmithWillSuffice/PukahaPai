@@ -1,0 +1,146 @@
+model_name = "mmm_0_4"
+# MMT government-price-anchor + private markup + universal JG buffer.
+# Nominal unit = the currency; time unit = year; labour = worker-years.
+# This is a new, deliberately small model, not an exact reproduction of Levey.
+# With w_JG = 0.0 the JG switches OFF; the government retains a nominal
+# anchor through its public-service wage and goods procurement bids.
+# IMPORTANT: The existing code generator uses TOML insertion order for u0.
+# Do not reorder [initial_conditions] independently of [variables].
+
+[parameters]
+# Demography and physical labour productivity (units of output/worker/year).
+N0 = 100.0
+beta = 0.01
+A_F0 = 1.0
+A_G0 = 1.0
+A_JG0 = 0.5
+alpha_F = 0.02
+alpha_G = 0.02
+alpha_JG = 0.01
+
+# Exogenous policy PRICES, not employment-share targets.
+# w_base > 0 guarantees a nominal anchor even when w_JG = 0.
+w_base = 1.0
+w_JG = 0.6                  # 0 => no JG; >0 => all residual workers employed by JG
+premium_G = 0.5             # w_G = w_JG + premium_G*w_base; requires premium_G>0
+premium_F = 0.2             # w_F = (1+premium_F)*w_G; firms compete with public jobs
+p_goods_factor = 1.2        # Government goods bid P_G = p_goods_factor*w_base/A_F0
+
+# Fiscal procurement budgets, NOT labour employment targets.
+# Government public employment is derived from payroll/w_G, not fixed as a share.
+public_payroll = 11.0       # nominal government payroll per year (non-JG jobs)
+goods_budget = 6.0          # nominal spending on goods at posted P_G, per year
+r_H = 0.15                 # proportional wage-income tax
+r_F = 0.05                 # simplified turnover tax on firm sales (not profit tax)
+
+# Household consumption: share of after-tax wage flow, plus draw on deposits.
+c_w = 0.65
+c_m = 0.10                 # per-year propensity to spend from deposits
+
+# Private market: unit-labour-cost mark-up with demand-responsive *relative* price.
+monopoly = 0.20            # private mark-up on nominal unit labour cost
+eta_p = 0.35               # markup pressure from goods-market excess demand
+tau_P = 1.0                # price adjustment rate, 1/year
+kappa_L = 0.7              # firm labour adjustment rate, 1/year
+
+[variables]
+# All five variables have ODEs. Stock variables are in nominal currency units.
+# G_N is government's net financial position, NOT a bank deposit.
+# It goes negative when spending exceeds taxes; F_D + W_D + G_N is conserved.
+names = ["P", "lambda_F", "F_D", "W_D", "G_N"]
+
+[initial_conditions]
+# MUST match the order in [variables].names for current Julia template.
+P = 1.5
+lambda_F = 0.65
+F_D = 100.0
+W_D = 100.0
+G_N = -200.0
+
+[equations.auxiliary]
+# Demography; A variables are physical productivity LEVELS, alpha are growth rates.
+N = "N0 * exp(beta*t)"
+A_F = "A_F0 * exp(alpha_F*t)"
+A_G = "A_G0 * exp(alpha_G*t)"
+A_JG = "A_JG0 * exp(alpha_JG*t)"
+
+# Government policy wages are nominal price offers, not market-clearing prices.
+w_G = "w_JG + premium_G*w_base"
+w_F = "(1 + premium_F)*w_G"
+P_G = "p_goods_factor*w_base/A_F0"
+
+# Public-service employment is budget-determined at the public wage.
+# ADMISSIBLE parameter range: public_payroll/w_G < N0; 0<=lambda_F<=1.
+L_G = "public_payroll/w_G"
+N_res = "N - L_G"
+L_F = "lambda_F*N_res"
+U3 = "N_res - L_F"                   # NON-JG labour slack proxy, not published official U-3
+L_JG = "(w_JG > 0.0)*U3"           # automatic employment buffer; exactly 0 if JG off
+L_total = "L_F + L_G + L_JG"
+U_open = "N - L_total"             # 0 if JG on, U3 if off
+Q_F = "A_F*L_F"
+Q_G = "A_G*L_G"                    # nonmarket public-service output
+Q_JG = "A_JG*L_JG"                 # separately reported JG useful-service output
+
+# Government spending: each item is separately accounted below in [godley].
+G_G = "w_G*L_G"
+G_JG = "w_JG*L_JG"
+G_goods = "goods_budget"
+Q_goods = "G_goods/P_G"            # assumes firms accept government's posted bid
+G_total = "G_G + G_JG + G_goods"
+
+# Firm wages, household demand, tax bases and final private sales.
+W_F = "w_F*L_F"
+W_all = "W_F + G_G + G_JG"
+T_H = "r_H*W_all"
+C = "c_w*(W_all - T_H) + c_m*W_D"
+Sales_F = "C + G_goods"
+T_F = "r_F*Sales_F"                 # TURNOVER tax (transparent simplification)
+T_total = "T_H + T_F"
+Q_demand = "C/P + Q_goods"         # private buyers pay P; government pays P_G
+
+# Unit-labour-cost private pricing and relative markup pressure.
+# Government supplies the nominal reference through its offered wage and goods bid.
+# P itself is permitted to deviate with private costs and shortages.
+excess = "(Q_demand - Q_F)/(A_F*N_res)"
+P_unit_cost = "w_F/A_F"
+P_target = "(1 + monopoly)*P_unit_cost*exp(eta_p*excess)"
+pi_rate = "tau_P*(P_target/P - 1)" # instantaneous inflation, f_P/P
+
+# Sector balances for diagnostics; identity: S_NG = G_total - T_total.
+S_NG = "G_total - T_total"
+Y_F_nom = "C + G_goods"           # total realized nominal firm sales
+
+[godley]
+# [source account, destination account, nominal currency flow/year, description]
+# All flow amounts MUST be nonnegative in intended admissible trajectories.
+# Government expenditure: counterpart is G_N decreasing, recipient deposits rising.
+T1 = ["F_D", "W_D", "W_F", "Firm wages"]
+T2 = ["G_N", "W_D", "G_G", "Public-service payroll"]
+T3 = ["G_N", "W_D", "G_JG", "JG buffer payroll"]
+T4 = ["G_N", "F_D", "G_goods", "Government goods procurement at posted bid"]
+T5 = ["W_D", "F_D", "C", "Household consumption purchases"]
+T6 = ["W_D", "G_N", "T_H", "Household wage-income tax"]
+T7 = ["F_D", "G_N", "T_F", "Firm turnover tax"]
+
+[equations.ode]
+# Anchored private price adjustment; not an exogenous CPI inflation process.
+f_P = "tau_P*(P_target - P)"
+# Within (0,1), lambda_F remains within (0,1) under this logistic adjustment.
+# Employment responds to real effective demand relative to firms' output.
+f_lambda_F = "kappa_L*lambda_F*(1 - lambda_F)*excess"
+# f_F_D, f_W_D, f_G_N supplied entirely by the [godley] transactions above.
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+[solver]
+dt = 0.1
+method = "Tsit5" # metadata; current template still hardcodes Sundials.IDA()
+
+[plots]
+time_series = ["P", "lambda_F", "F_D", "W_D", "G_N", "U3", "U_open", "L_JG", "pi_rate"]
+
+[eigenvalues]
+all = false # existing template's residual Jacobian has wrong sign for stability

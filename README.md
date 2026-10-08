@@ -1,5 +1,5 @@
 # PukahaPai
-[![Development Status](https://img.shields.io/badge/Status-Alpha-orange)](https://yourprojecturl.com/docs/alpha-status) [![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)](https://www.python.org/) [![Julia](https://img.shields.io/badge/Julia-1.8+-purple?logo=julia&logoColor=white)](https://julialang.org/) [![Configuration](https://img.shields.io/badge/Config-TOML-gray?logo=toml&logoColor=white)](https://toml.io/) Your project description starts here...
+[![Development Status](https://img.shields.io/badge/Status-Alpha-orange)](https://yourprojecturl.com/docs/alpha-status) [![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)](https://www.python.org/) [![Julia](https://img.shields.io/badge/Julia-1.8+-purple?logo=julia&logoColor=white)](https://julialang.org/) [![Configuration](https://img.shields.io/badge/Config-TOML-gray?logo=toml&logoColor=white)](https://toml.io/) 
 
 
 This project is for a _future_ dearpygui app for interactively running (simple)
