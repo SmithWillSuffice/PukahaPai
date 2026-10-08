@@ -5,6 +5,23 @@ sigma = 10.0
 rho = 28.0
 beta = 2.6
 
+# Physical Lorenz-convection parameter domain. The mathematical ODEs can be
+# extended outside this domain, but this saved model is intended to represent
+# the standard convection interpretation.
+[limits.parameters.sigma]
+min = 0.0
+min_inclusive = false
+description = "Prandtl-like parameter sigma must be positive"
+
+[limits.parameters.rho]
+min = 0.0
+description = "Rayleigh-control parameter rho is nonnegative in this model"
+
+[limits.parameters.beta]
+min = 0.0
+min_inclusive = false
+description = "Geometric dissipation parameter beta must be positive"
+
 [variables]
 names = ["x", "y", "z"]
 

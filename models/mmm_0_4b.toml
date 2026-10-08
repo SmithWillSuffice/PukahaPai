@@ -1,4 +1,4 @@
-model_name = "mmm_0_4"
+model_name = "mmm_0_4b"
 # MMT government-price-anchor + private markup + universal JG buffer.
 # Nominal unit = the currency; time unit = year; labour = worker-years.
 # This is a new, deliberately small model, not an exact reproduction of Levey.
@@ -43,18 +43,6 @@ eta_p = 0.35               # markup pressure from goods-market excess demand
 tau_P = 1.0                # price adjustment rate, 1/year
 kappa_L = 0.7              # firm labour adjustment rate, 1/year
 
-
-# Optional hard admissibility constraints owned by this model specification.
-# Quantities not listed here are deliberately unconstrained by the parser.
-[limits.parameters.premium_F]
-min = -1.0
-min_inclusive = false
-description = "Firm wage multiplier (1 + premium_F) must remain positive"
-
-[limits.initial_conditions.lambda_F]
-min = 0.0
-max = 1.0
-description = "Initial firm-employment fraction must lie in [0,1]"
 
 [variables]
 # All five variables have ODEs. Stock variables are in nominal currency units.

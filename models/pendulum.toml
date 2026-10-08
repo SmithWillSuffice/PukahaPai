@@ -6,6 +6,17 @@ length = 1.0
 damping = 0.1
 g = 9.81
 
+
+# Hard model-domain constraints. Only quantities listed here are validated.
+[limits.parameters.length]
+min = 0.0
+min_inclusive = false
+description = "Pendulum length appears in a denominator and must be positive"
+
+[limits.parameters.damping]
+min = 0.0
+description = "This model interprets damping as passive friction"
+
 [variables]
 names = ["theta", "omega"]
 

@@ -21,9 +21,10 @@ as `./models/pendulum_cmdl.jl`.
 '''
 
 from pathlib import Path
-import tomllib
 import re
 from collections import defaultdict, deque
+
+from model_validation import ModelValidationError, load_and_validate_model
 
 def julia_type(ctype_str):
     if ctype_str == "c_double":
@@ -115,8 +116,7 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     if not toml_path.exists():
         raise FileNotFoundError(f"Model file not found: {toml_path}")
 
-    with open(toml_path, "rb") as f:
-        config = tomllib.load(f)
+    config = load_and_validate_model(toml_path)
 
     parameters = config.get("parameters", {})
     variable_names = config["variables"]["names"]
@@ -209,13 +209,20 @@ if __name__ == "__main__":
 
     model_name = sys.argv[1]
 
-    with open(TEMPLATE_1_PATH, 'r') as f:
-        gui_template = f.read()
-        generate_julia_code(model_name, gui_template, gui_version=True)
+    try:
+        with open(TEMPLATE_1_PATH, 'r') as f:
+            gui_template = f.read()
+            generate_julia_code(model_name, gui_template, gui_version=True)
 
-    with open(TEMPLATE_2_PATH, 'r') as f:
-        standalone_template = f.read()
-        generate_julia_code(model_name, standalone_template, gui_version=False)
+        with open(TEMPLATE_2_PATH, 'r') as f:
+            standalone_template = f.read()
+            generate_julia_code(model_name, standalone_template, gui_version=False)
+
+    except ModelValidationError as e:
+        print()
+        print(e)
+        print("No Julia solver was generated.")
+        sys.exit(2)
 
     print(f"Generated GUI and standalone Julia DAE solvers for model: {model_name}")
     print(f"Run standalone with: julia models/{model_name}_cmdl.jl")
