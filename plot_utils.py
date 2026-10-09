@@ -27,6 +27,81 @@ import re
 _NEAR_CONSTANT_REL_TOL = 1.0e-6
 _NEAR_CONSTANT_ABS_TOL = 1.0e-12
 _NEAR_CONSTANT_PAD_FRACTION = 0.10
+_TARGET_Y_TICKS = 5
+
+
+def _clean_number(value, significant_digits=6):
+    """
+    Return a visually clean float/string pair without changing plotted data.
+
+    Axis tick arithmetic can produce values such as
+    -0.300000000000005 even when the mathematically intended tick is -0.3.
+    The numeric value is rounded to a reasonable number of significant digits
+    and the display string has trailing zeroes removed.
+    """
+    if not np.isfinite(value):
+        return float(value), str(value)
+
+    cleaned = float(f"{float(value):.{significant_digits}g}")
+    if cleaned == 0.0:
+        cleaned = 0.0  # avoid displaying -0
+
+    label = f"{cleaned:.{significant_digits}g}"
+    return cleaned, label
+
+
+def _nice_tick_step(span, target_ticks=_TARGET_Y_TICKS):
+    """Choose a conventional 1, 2, 2.5, 5, 10 × 10^n axis tick spacing."""
+    if not np.isfinite(span) or span <= 0.0:
+        return 1.0
+
+    raw = span / max(target_ticks - 1, 1)
+    exponent = np.floor(np.log10(raw))
+    fraction = raw / (10.0 ** exponent)
+
+    if fraction <= 1.0:
+        nice_fraction = 1.0
+    elif fraction <= 2.0:
+        nice_fraction = 2.0
+    elif fraction <= 2.5:
+        nice_fraction = 2.5
+    elif fraction <= 5.0:
+        nice_fraction = 5.0
+    else:
+        nice_fraction = 10.0
+
+    return nice_fraction * (10.0 ** exponent)
+
+
+def _nice_tick_values(y_min, y_max):
+    """
+    Construct stable, explicitly labelled ticks for an ordinary time series.
+
+    Plotly normally chooses good tick locations, but browser-side floating-point
+    tick arithmetic can expose binary artefacts.  Supplying clean tick values
+    and text prevents labels such as ``-0.300000000000005`` while leaving the
+    plotted data untouched.
+    """
+    span = y_max - y_min
+    step = _nice_tick_step(span)
+
+    start = np.ceil(y_min / step - 1.0e-12) * step
+    stop = np.floor(y_max / step + 1.0e-12) * step
+
+    if start > stop:
+        return None, None
+
+    count = int(np.floor((stop - start) / step + 0.5)) + 1
+    raw_ticks = [start + i * step for i in range(count)]
+
+    tickvals = []
+    ticktext = []
+    for value in raw_ticks:
+        clean, label = _clean_number(value)
+        tickvals.append(clean)
+        ticktext.append(label)
+
+    return tickvals, ticktext
 
 
 def _time_series_axis_options(values):
@@ -61,9 +136,10 @@ def _time_series_axis_options(values):
     finite = arr[np.isfinite(arr)]
 
     options = {
-        # Six significant digits is ample for a visual diagnostic, while "~"
-        # removes unnecessary trailing zeros.
-        "tickformat": ".6~g",
+        # Retained as a fallback for hover/zoom states.  Normal ticks below use
+        # explicit clean text so browser-side binary artefacts cannot leak into
+        # the labels.
+        "tickformat": ".6g",
         "nticks": 6,
     }
 
@@ -97,6 +173,20 @@ def _time_series_axis_options(values):
         lower = float(f"{centre - pad:.12g}")
         upper = float(f"{centre + pad:.12g}")
         options["range"] = [lower, upper]
+
+        tickvals, ticktext = _nice_tick_values(lower, upper)
+        if tickvals:
+            options["tickmode"] = "array"
+            options["tickvals"] = tickvals
+            options["ticktext"] = ticktext
+    else:
+        # For ordinary varying series, keep Plotly's autorange but make the
+        # tick locations/text explicit and numerically clean.
+        tickvals, ticktext = _nice_tick_values(y_min, y_max)
+        if tickvals:
+            options["tickmode"] = "array"
+            options["tickvals"] = tickvals
+            options["ticktext"] = ticktext
 
     return options
 

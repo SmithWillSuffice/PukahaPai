@@ -5,18 +5,16 @@
 ## ODE: ordinary differential equation
 
 An ordinary differential equation has the familiar explicit form
-
-\[
+$$
 \frac{du}{dt}=f(u,p,t).
-\]
+$$
 
-In SciML/DifferentialEquations.jl, this is represented by an `ODEProblem`. The current documentation also allows a mass-matrix form
-
-\[
+In SciML/DifferentialEquations.jl, this is represented by an `ODEProblem`. 
+The current documentation also allows a mass-matrix form
+$$
 M\frac{du}{dt}=f(u,p,t),
-\]
-
-with the ordinary explicit ODE recovered when \(M=I\). [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/v7.17/types/ode_types/?utm_source=chatgpt.com)
+$$
+with the ordinary explicit ODE recovered when $M=I$. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/v7.17/types/ode_types/)
 
 A typical Julia definition is
 
@@ -29,11 +27,14 @@ end
 prob = ODEProblem(rhs!, u0, tspan)
 ```
 
-The important point is that, given \(u\) and \(t\), the equations directly determine \(\dot u\).
+The important point is that, given $u$ and $t$, the equations directly 
+determine $\dot u$.
 
-For an ordinary pendulum or the Lorenz equations, this is exactly the natural mathematical form. There is no benefit in disguising them as DAEs.
+For an ordinary pendulum or the Lorenz equations, this is exactly the 
+natural mathematical form. There is no benefit in disguising them as DAEs.
 
-Once you have an `ODEProblem`, you still have to choose an integration algorithm. Examples include
+Once you have an `ODEProblem`, you still have to choose an integration 
+algorithm. Examples include
 
 ```julia
 Tsit5()
@@ -42,17 +43,18 @@ Vern7()
 Rodas5P()
 ```
 
-and many others. These are numerical methods, not alternative meanings of “ODE”.
+and many others. These are numerical methods, not alternative meanings 
+of “ODE”.
 
 ### DAE: differential-algebraic equation
 
 A DAE is more general. SciML represents a fully implicit DAE in the form
 
-\[
+$$
 0=F(\dot u,u,p,t).
-\]
+$$
 
-That is what `DAEProblem` means. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/stable/types/dae_types/?utm_source=chatgpt.com)
+That is what `DAEProblem` means. [Again, see: SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/stable/types/dae_types/)
 
 In Julia, the residual function looks like
 
@@ -69,49 +71,51 @@ prob = DAEProblem(
     tspan
 )
 ```
-
-The crucial difference is that the equations do not necessarily solve directly for every component of \(\dot u\).
+The crucial difference is that the equations do not necessarily solve 
+directly for every component of $\dot u$.
 
 For example, suppose
-
-\[
+$$
 \dot x=v,
-\]
-
+$$
 but another variable is constrained algebraically by
-
-\[
+$$
 x^2+y^2=1.
-\]
-
-Then \(y\) is not governed by its own ordinary evolution law; it must satisfy a constraint at every time. That is naturally a DAE.
+$$
+Then $y$ is not governed by its own ordinary evolution law; it must 
+satisfy a constraint at every time. That is naturally a DAE.
 
 A schematic DAE might therefore be
-
-\[
+$$
 \begin{aligned}
-\dot x-v &=0,\\
-x^2+y^2-1&=0.
+\dot x-v  &=0,\\\\
+x^2+y^2-1 &=0.
 \end{aligned}
-\]
-
+$$
 The second equation contains no derivative at all.
 
-This is why DAEs occur naturally in constrained mechanics, circuits, chemical-equilibrium systems, power systems, incompressibility constraints, and many coupled engineering models.
+This is why DAEs occur naturally in constrained mechanics, circuits, 
+chemical-equilibrium systems, power systems, incompressibility constraints, 
+and many coupled engineering models.
 
 There is also an intermediate representation called a mass-matrix system,
-
-\[
+$$
 M\dot u=f(u,t),
-\]
+$$
 
-where \(M\) may be singular. SciML treats many such systems through `ODEProblem` with a mass matrix, while fully implicit systems use `DAEProblem`. The current solver documentation explicitly distinguishes mass-matrix DAEs from fully implicit DAEs. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/?utm_source=chatgpt.com)
+where $M$ may be singular. SciML treats many such systems through 
+`ODEProblem` with a mass matrix, while fully implicit systems 
+use `DAEProblem`. The current solver documentation explicitly 
+distinguishes mass-matrix DAEs from fully implicit DAEs.
 
 ### IDA: a particular DAE solver
 
-`IDA` is not another equation type. It is an algorithm supplied by the Sundials library for solving fully implicit DAEs.
+`IDA` is not another equation type. It is an algorithm supplied by 
+the Sundials library for solving fully implicit DAEs.
 
-SciML describes `Sundials.IDA` as a fixed-leading-coefficient, fully implicit BDF method, and recommends it as a general solver for fully implicit `Float64` DAEs. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/?utm_source=chatgpt.com)
+SciML describes `Sundials.IDA` as a fixed-leading-coefficient, fully 
+implicit BDF method, and recommends it as a general solver for fully 
+implicit `Float64` DAEs.
 
 So:
 
@@ -119,57 +123,52 @@ So:
 prob = DAEProblem(...)
 sol = solve(prob, Sundials.IDA())
 ```
-
 means:
 
 - `DAEProblem` describes the mathematics;
 - `IDA()` chooses the numerical algorithm.
 
-IDA uses a BDF — backward differentiation formula — family of implicit multistep methods. Because it is implicit, each step generally involves solving nonlinear equations, typically with Newton-type iterations and a linear solver internally. That extra work is why using IDA on a simple explicit pendulum was unnecessary overhead.
+IDA uses a BDF — backward differentiation formula — family of implicit 
+multistep methods. Because it is implicit, each step generally involves 
+solving nonlinear equations, typically with Newton-type iterations and 
+a linear solver internally. That extra work is why using IDA on a simple 
+explicit pendulum was unnecessary overhead.
 
-Also, with current DifferentialEquations.jl releases, Sundials is not automatically loaded merely by
-
+Also, with current DifferentialEquations.jl releases, Sundials is not 
+automatically loaded merely by
 ```julia
 using DifferentialEquations
 ```
-
-so IDA requires the Sundials package explicitly. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/stable/getting_started/?utm_source=chatgpt.com)
+so IDA requires the Sundials package explicitly. 
 
 ### Where `Tsit5` fits
 
-`Tsit5` sits at the same conceptual level as `IDA`, not at the same level as `ODEProblem`.
+`Tsit5` sits at the same conceptual level as `IDA`, not at the same 
+level as `ODEProblem`.
 
 For example:
-
 ```julia
 prob = ODEProblem(rhs!, u0, tspan)
 sol = solve(prob, Tsit5())
 ```
-
 means:
-
 - `ODEProblem`: explicit ODE mathematical problem;
 - `Tsit5()`: numerical integration algorithm.
 
 Whereas:
-
 ```julia
 prob = DAEProblem(residual!, du0, u0, tspan)
 sol = solve(prob, Sundials.IDA())
 ```
-
 means:
-
 - `DAEProblem`: fully implicit DAE mathematical problem;
 - `IDA()`: numerical integration algorithm.
-
-That distinction is the one worth making very explicit in your documentation.
 
 ### A useful hierarchy
 
 I would summarize it as:
 
-```text
+```
 Mathematical problem
 │
 ├── ODEProblem
@@ -193,37 +192,37 @@ Mathematical problem
 ```
 
 There is also the mass-matrix route:
-
-```text
+```
 ODEProblem with mass matrix
     M du/dt = f(u,p,t)
 ```
 
 which overlaps mathematically with some DAEs.
 
-So no, I would not say “ODE, DAE and IDA are the three main kinds.” A better taxonomy is:
+A  taxonomy is:
 
-- `ODEProblem`: ordinary differential-equation problem;
-- `DAEProblem`: fully implicit differential-algebraic problem;
-- `Tsit5`, `IDA`, `Rodas5P`, `RK4`, etc.: numerical algorithms chosen to solve suitable problem types.
+- `ODEProblem`:--- ordinary differential-equation problem;
+- `DAEProblem`:--- fully implicit differential-algebraic problem;
+- `Tsit5`, `IDA`, `Rodas5P`, `RK4`, etc.:--- numerical algorithms chosen 
+to solve suitable problem types.
 
-And beyond ODE/DAE, SciML has many other problem classes — SDEs, delay equations, boundary-value problems, jump processes, steady-state problems, second-order/dynamical ODEs, and so forth. DifferentialEquations.jl explicitly documents these as separate problem types. [SCIML Documentation](https://docs.sciml.ai/DiffEqDocs/?utm_source=chatgpt.com)
+And beyond ODE/DAE, SciML has many other problem classes — SDEs, 
+delay equations, boundary-value problems, jump processes, steady-state 
+problems, second-order/dynamical ODEs, and so forth. 
+DifferentialEquations.jl explicitly documents these as separate problem 
+types.
 
-For PukahaPai specifically, I would state the policy as:
+For **PukahaPai** specifically, I would state the policy as:
 
-```text
-If the TOML supplies ordinary evolution laws
-
-    dx_i/dt = f_i(x,t),
-
-generate an ODEProblem.
-
-If the model genuinely contains algebraic constraints or equations
-that cannot be solved explicitly for all state derivatives, generate
-a DAEProblem.
-
+> If the TOML supplies ordinary evolution laws
+$$
+  dx_i/dt = f_i(x,t),
+$$
+generate an ODEProblem. <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;If the model genuinely contains 
+algebraic constraints or equations that cannot be solved explicitly for 
+all state derivatives, generate a DAEProblem.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The selected solver method is then chosen independently subject to
 compatibility with that problem type.
-```
 
-That captures exactly the architectural correction we just made.

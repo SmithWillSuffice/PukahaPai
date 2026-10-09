@@ -1,0 +1,211 @@
+model_name = "mmm_1_3"
+# Minimal Job Guarantee extension of mmm_0_3.
+#
+# Design goal:
+#   preserve the earlier Keen/Minsky-style macro structure as far as possible,
+#   while adding a JG that absorbs residual non-regular employment and softens
+#   the singular Phillips response.
+#
+# This is deliberately a REAL-SIDE JG prototype.  The financial-account block
+# is left as in mmm_0_3; a later version should add explicit JG wage payments
+# and a more complete government/bank balance sheet.
+
+[parameters]
+N0 = 100.0
+A0 = 1.0
+K0 = 100.0
+cG = 0.3
+varpi = 0.1
+nu = 2.5
+alpha = 0.02
+beta = 0.01
+monopoly = 0.2
+s = 0.2
+
+# ---------------------------------------------------------------------------
+# JG / wage-pressure parameters
+# ---------------------------------------------------------------------------
+# Fraction of residual workers who enter the JG.  Set to 0 to recover open
+# unemployment; set to 1 for full residual JG employment.
+jg_participation = 1.0
+
+# JG labour is useful but less productive than ordinary private employment.
+# A_JG = A_JG_ratio * A, so this is directly GUI-tunable.
+A_JG_ratio = 0.35
+
+# Phillips curve parameters.  The old hyperbola diverged as lambda -> 1.
+# The JG buffer adds a positive denominator floor, making wage pressure finite.
+Phi_d = 0.05
+Phi_c = 1.0
+gamma_p = 2.0
+Phi_JG_buffer = 0.15
+
+deprec = 0.05
+tau_P = 0.1
+
+# Investment response parameters: power law
+ai = 0.05
+bi = 0.05
+ci = 1.75
+di = 0.0
+gamma_i = 2.0
+
+rT = 0.34
+rW = 0.6
+iG = 0.03
+sigma_F = 0.37
+
+
+[limits.parameters.jg_participation]
+min = 0.0
+max = 1.0
+description = "Fraction of residual workers enrolled in the Job Guarantee"
+
+[limits.parameters.A_JG_ratio]
+min = 0.0
+max = 1.0
+description = "JG productivity as a fraction of ordinary productivity"
+
+[limits.parameters.Phi_JG_buffer]
+min = 0.0
+min_inclusive = false
+description = "Positive denominator floor that flattens the Phillips response"
+
+[limits.initial_conditions.lambda]
+min = 0.0
+max = 1.0
+description = "Initial regular-employment rate must lie in [0,1]"
+
+
+[variables]
+# Active financial accounts, unchanged from mmm_0_3:
+# G_D = government debt/bond account
+# G_T = government tax-record account
+# F_D = firm deposits
+# W_D = household deposits
+#
+# Macro states:
+# P       = price level
+# D       = aggregate private/NG debt proxy
+# u       = wage share
+# lambda  = REGULAR employment rate.  The residual can enter the JG.
+names = ["G_D", "G_T", "F_D", "W_D", "P", "D", "u", "lambda"]
+
+
+[initial_conditions]
+G_D = 0.0
+G_T = 0.0
+F_D = 0.0
+W_D = 0.0
+P = 1.0
+D = 50.0
+u = 0.6
+lambda = 0.9
+
+
+[equations.auxiliary]
+A = "A0 * exp(alpha*t)"
+N = "N0 * exp(beta*t)"
+
+# ---------------------------------------------------------------------------
+# Regular employment + JG residual
+# ---------------------------------------------------------------------------
+L_F = "lambda*N"
+L_JG = "jg_participation*(1 - lambda)*N"
+U_open = "(1 - jg_participation)*(1 - lambda)*N"
+
+lambda_JG = "L_JG/N"
+u_open_rate = "U_open/N"
+
+# JG productivity follows ordinary productivity but at a lower level.
+A_JG = "A_JG_ratio*A"
+
+Yr_F = "A*L_F"
+Yr_JG = "A_JG*L_JG"
+Yr = "Yr_F + Yr_JG"
+Y = "Yr*P"
+
+# Keep the old symbol L for regular labour so the wage/profit block changes as
+# little as possible.
+L = "L_F"
+K = "nu*Y"
+
+# Fiscal functions, unchanged structurally.
+G = "cG*Y"
+T = "rT*Y"
+
+# ---------------------------------------------------------------------------
+# Flattened Phillips response
+# ---------------------------------------------------------------------------
+# The JG prevents the old singular wage-pressure explosion at lambda -> 1.
+# With Phi_JG_buffer > 0 the curve remains finite.
+Phi = "Phi_d/(Phi_JG_buffer + 1 - lambda)^gamma_p - Phi_c"
+
+Gamma = "(1 - u)/nu - deprec"
+
+# Profit equation retained from mmm_0_3.
+Pi = "Y - u*A*L + iG*D"
+pi = "Pi/K"
+
+# Investment curve retained from mmm_0_3.
+Inv = "ai/(bi + ci*pi)^gamma_i - di"
+S = "G - T + Inv*Y"
+
+
+[godley]
+# Financial transactions are intentionally unchanged from mmm_0_3.
+# A later JG-financial model should add explicit JG wage/payment entries.
+T1 = ["F_D", "W_D", "u*lambda*A*N", "Worker wages"]
+T2 = ["G_D", "F_D", "sigma_F*iG*G_D", "Interest to firms"]
+T3 = ["G_D", "W_D", "(1 - sigma_F)*iG*G_D", "Interest to households"]
+T4 = ["F_D", "G_T", "(1 - rW)*T", "Corporate tax revenue"]
+T5 = ["W_D", "G_T", "rW*T", "Household tax revenue"]
+
+
+[equations.ode]
+# Price is cost + markup, retained from mmm_0_3.
+f_P = "tau_P*(u/(1 - monopoly) - P)"
+
+# Debt/fiscal balance retained from mmm_0_3.
+f_D = "G - T"
+
+# lambda now means regular employment.  The JG absorbs the residual labour
+# rather than forcing lambda itself to one.
+f_lambda = "lambda*(Gamma - deprec - alpha - beta)"
+
+# Wage share sees the flattened JG-modified Phillips pressure.
+f_u = "u*(Phi + varpi*f_lambda/lambda + f_P/P - alpha)"
+
+# f_G_D, f_G_T, f_F_D and f_W_D are supplied by [godley].
+
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+
+[solver]
+dt = 0.1
+method = "Tsit5"
+adaptive = false
+output_dt = 0.1
+
+
+[plots]
+time_series = [
+    "P", "u",
+    "lambda", "lambda_JG",
+    "Yr_F", "Yr_JG",
+    "F_D", "W_D"
+]
+combine_stability_lyapunov_plots = false
+
+
+[eigenvalues]
+all = true
+
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 5.0

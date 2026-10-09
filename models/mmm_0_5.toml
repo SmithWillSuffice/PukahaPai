@@ -1,0 +1,353 @@
+model_name = "mmm_0_5"
+# Price-setting + Job Guarantee model, revised with:
+#   * a productivity-aware nominal wage anchor,
+#   * a positive target inflation rate,
+#   * endogenous private wage bidding against the JG buffer,
+#   * lagged private investment,
+#   * a real-goods inventory cycle,
+#   * finite JG enrolment speed rather than an exact algebraic mirror of firm employment.
+#
+# Units:
+#   time   = year
+#   labour = worker-years
+#   nominal stocks/flows = currency units
+#   V      = real private-goods inventory stock
+#
+# This remains a stylized MMT/post-Keynesian model, not a calibrated economy.
+
+[parameters]
+# ---------------------------------------------------------------------------
+# Population and productivity
+# ---------------------------------------------------------------------------
+N0 = 100.0
+beta = 0.01
+
+A_F0 = 1.0
+A_G0 = 1.0
+A_JG0 = 0.5
+
+alpha_F = 0.02
+alpha_G = 0.02
+alpha_JG = 0.01
+
+# ---------------------------------------------------------------------------
+# Nominal anchor and inflation objective
+# ---------------------------------------------------------------------------
+# The old fixed nominal JG wage combined with rising productivity forced
+# unit labour cost downward and therefore generated persistent deflation.
+# Here the policy wage grows with productivity + the target inflation rate.
+w_JG0 = 0.60
+pi_star = 0.02
+
+# Regular public-service wage premium above the JG wage.
+premium_G = 0.80
+
+# Firms bid above the JG wage.  The premium rises when the JG buffer becomes
+# small, representing tighter recruitment conditions.
+premium_F_min = 0.35
+premium_F_tight = 0.40
+jg_wage_scale = 0.05
+kappa_w = 1.0
+
+p_goods_factor = 1.20
+
+# ---------------------------------------------------------------------------
+# Regular public services and procurement
+# ---------------------------------------------------------------------------
+q_G_pc0 = 0.12
+gamma_G_service = 0.02
+q_goods_pc = 0.10
+
+# ---------------------------------------------------------------------------
+# Taxes and household demand
+# ---------------------------------------------------------------------------
+r_H = 0.15
+r_F = 0.05
+c_w = 0.80
+c_m = 0.02
+
+# ---------------------------------------------------------------------------
+# Private price setting, employment and investment
+# ---------------------------------------------------------------------------
+monopoly = 0.20
+eta_p = 0.20
+tau_P = 0.50
+
+u_F_target = 0.90
+kappa_L = 1.50
+
+# Investment is now a state variable.  Its desired share responds to
+# utilization, but only with a lag.
+iota_base = 0.08
+eta_I = 3.0
+kappa_I = 0.30
+
+# ---------------------------------------------------------------------------
+# Inventory-cycle mechanism
+# ---------------------------------------------------------------------------
+# Firms hold a desired inventory equal to inventory_ratio years of current
+# real private demand.  Production responds to inventory gaps with a lag.
+# This is the principal endogenous business-cycle mechanism in this version.
+inventory_ratio = 0.20
+kappa_V = 0.80
+
+# ---------------------------------------------------------------------------
+# JG enrolment friction
+# ---------------------------------------------------------------------------
+# rho_JG is the fraction of otherwise-idle workers actually enrolled in JG.
+# A high target preserves the guarantee interpretation while allowing a small
+# open-unemployment/administrative transition margin.
+rho_JG_target = 0.98
+kappa_JG = 2.0
+
+
+# ---------------------------------------------------------------------------
+# Model-owned admissibility limits
+# ---------------------------------------------------------------------------
+[limits.parameters.u_F_target]
+min = 0.0
+min_inclusive = false
+max = 1.0
+description = "Target private-sector utilization must lie in (0,1]"
+
+[limits.parameters.iota_base]
+min = 0.0
+max = 1.0
+description = "Baseline gross investment share must lie in [0,1]"
+
+[limits.parameters.rho_JG_target]
+min = 0.0
+max = 1.0
+description = "Target JG enrolment fraction must lie in [0,1]"
+
+[limits.initial_conditions.lambda_F]
+min = 0.0
+max = 1.0
+description = "Initial firm-employment fraction must lie in [0,1]"
+
+[limits.initial_conditions.rho_JG]
+min = 0.0
+max = 1.0
+description = "Initial JG enrolment fraction must lie in [0,1]"
+
+[limits.initial_conditions.iota_F]
+min = 0.0
+max = 1.0
+description = "Initial investment share must lie in [0,1]"
+
+
+[variables]
+# P          private price level
+# lambda_F   fraction of non-regular-government labour employed by firms
+# w_F        nominal private wage
+# iota_F     gross real investment share
+# rho_JG     fraction of residual slack enrolled in the JG
+# V          real private-goods inventory stock
+# F_D,W_D    private financial positions
+# G_N        signed consolidated government net financial position
+names = ["P", "lambda_F", "w_F", "iota_F", "rho_JG", "V", "F_D", "W_D", "G_N"]
+
+
+[initial_conditions]
+P = 1.10
+lambda_F = 0.95
+w_F = 0.90
+iota_F = 0.08
+rho_JG = 0.95
+V = 15.0
+F_D = 100.0
+W_D = 100.0
+G_N = -200.0
+
+
+[equations.auxiliary]
+# ---------------------------------------------------------------------------
+# Demography and productivity
+# ---------------------------------------------------------------------------
+N = "N0 * exp(beta*t)"
+A_F = "A_F0 * exp(alpha_F*t)"
+A_G = "A_G0 * exp(alpha_G*t)"
+A_JG = "A_JG0 * exp(alpha_JG*t)"
+
+# ---------------------------------------------------------------------------
+# Government wage / price anchor
+# ---------------------------------------------------------------------------
+# A productivity-aware nominal anchor avoids automatic secular deflation.
+w_JG = "w_JG0 * exp((alpha_F + pi_star)*t)"
+w_G = "(1 + premium_G)*w_JG"
+P_G = "p_goods_factor*w_JG/A_F"
+
+# ---------------------------------------------------------------------------
+# Regular public employment
+# ---------------------------------------------------------------------------
+q_G_pc = "q_G_pc0 * exp(gamma_G_service*t)"
+Q_G_des = "q_G_pc*N"
+L_G = "Q_G_des/A_G"
+
+N_res = "N - L_G"
+L_F = "lambda_F*N_res"
+U3 = "N_res - L_F"
+
+# JG is no longer an exact algebraic mirror of U3: rho_JG adjusts dynamically.
+L_JG = "rho_JG*U3"
+U_open = "U3 - L_JG"
+
+L_total = "L_F + L_G + L_JG"
+
+lambda_G = "L_G/N"
+lambda_JG = "L_JG/N"
+lambda_open = "U_open/N"
+lambda_regular = "(L_F + L_G)/N"
+
+# ---------------------------------------------------------------------------
+# Private wage bidding against the buffer stock
+# ---------------------------------------------------------------------------
+# When the JG pool is small, firms face tighter recruitment conditions and
+# bid a higher wage premium.  With a large JG buffer, the premium relaxes.
+jg_tightness = "exp(-lambda_JG/jg_wage_scale)"
+w_F_target = "w_JG*(1 + premium_F_min + premium_F_tight*jg_tightness)"
+
+# ---------------------------------------------------------------------------
+# Real output
+# ---------------------------------------------------------------------------
+Q_F = "A_F*L_F"
+Q_G = "A_G*L_G"
+Q_JG = "A_JG*L_JG"
+Q_total = "Q_F + Q_G + Q_JG"
+
+# ---------------------------------------------------------------------------
+# Government spending
+# ---------------------------------------------------------------------------
+G_G = "w_G*L_G"
+G_JG = "w_JG*L_JG"
+
+Q_goods = "q_goods_pc*N"
+G_goods = "P_G*Q_goods"
+G_total = "G_G + G_JG + G_goods"
+
+# ---------------------------------------------------------------------------
+# Household income and consumption
+# ---------------------------------------------------------------------------
+W_F = "w_F*L_F"
+W_all = "W_F + G_G + G_JG"
+
+T_H = "r_H*W_all"
+C = "c_w*(W_all - T_H) + c_m*W_D"
+
+# ---------------------------------------------------------------------------
+# Private investment and effective demand
+# ---------------------------------------------------------------------------
+I_real = "iota_F*Q_F"
+I_nom = "P*I_real"
+
+Sales_external = "C + G_goods"
+Taxable_F = "Sales_external + I_nom"
+T_F = "r_F*Taxable_F"
+T_total = "T_H + T_F"
+
+Q_demand = "C/P + Q_goods + I_real"
+u_F = "Q_demand/Q_F"
+
+# Desired investment share rises when utilization is above its normal level,
+# and falls when utilization is weak.  Exponential form keeps the target > 0.
+iota_target = "iota_base*exp(eta_I*(u_F - u_F_target))"
+
+# ---------------------------------------------------------------------------
+# Inventory cycle
+# ---------------------------------------------------------------------------
+V_target = "inventory_ratio*Q_demand"
+
+# Firms produce for current demand plus an inventory-restocking correction.
+Q_plan = "Q_demand + kappa_V*(V_target - V)"
+Q_required = "Q_plan/u_F_target"
+
+# Normalized labour-demand pressure.
+excess = "(Q_required - Q_F)/(A_F*N_res)"
+
+# ---------------------------------------------------------------------------
+# Private pricing
+# ---------------------------------------------------------------------------
+P_unit_cost = "w_F/A_F"
+P_target = "(1 + monopoly)*P_unit_cost*exp(eta_p*excess)"
+pi_rate = "f_P/P"
+
+# ---------------------------------------------------------------------------
+# Fiscal / welfare diagnostics
+# ---------------------------------------------------------------------------
+S_NG = "G_total - T_total"
+NFA_private = "F_D + W_D"
+
+Y_exp_nom = "C + I_nom + G_goods + G_G + G_JG"
+Y_real_pc = "Y_exp_nom/(P*N)"
+C_real_pc = "C/(P*N)"
+
+
+[godley]
+# [source account, destination account, nominal flow/year, description]
+# Investment remains an intra-firm-sector purchase at this aggregation level.
+T1 = ["F_D", "W_D", "W_F", "Firm wages"]
+T2 = ["G_N", "W_D", "G_G", "Regular public-service payroll"]
+T3 = ["G_N", "W_D", "G_JG", "JG buffer payroll"]
+T4 = ["G_N", "F_D", "G_goods", "Government purchases of private goods"]
+T5 = ["W_D", "F_D", "C", "Household consumption purchases"]
+T6 = ["W_D", "G_N", "T_H", "Household wage-income tax"]
+T7 = ["F_D", "G_N", "T_F", "Firm turnover tax"]
+
+
+[equations.ode]
+# Price adjustment around private cost + markup.
+f_P = "tau_P*(P_target - P)"
+
+# Firm employment responds to demand plus inventory-restocking pressure.
+f_lambda_F = "kappa_L*lambda_F*(1 - lambda_F)*excess"
+
+# Private wages respond with a finite lag to buffer-stock tightness.
+f_w_F = "kappa_w*(w_F_target - w_F)"
+
+# Investment has its own accelerator/adjustment lag.
+f_iota_F = "kappa_I*(iota_target - iota_F)"
+
+# JG enrolment is rapid but not instantaneous.
+f_rho_JG = "kappa_JG*(rho_JG_target - rho_JG)"
+
+# Real inventory accumulation is production minus final private demand.
+f_V = "Q_F - Q_demand"
+
+# f_F_D, f_W_D and f_G_N are supplied from [godley].
+
+
+[tspan]
+t0 = 0.0
+t1 = 50.0
+
+
+[solver]
+dt = 0.05
+method = "Tsit5"
+adaptive = false
+output_dt = 0.1
+abstol = 1e-8
+reltol = 1e-6
+
+
+[plots]
+time_series = [
+    "P", "pi_rate",
+    "lambda_F", "lambda_JG",
+    "lambda_G", "lambda_open",
+    "u_F", "iota_F",
+    "V", "V_target",
+    "Y_real_pc", "C_real_pc",
+    "F_D", "W_D"
+]
+combine_stability_lyapunov_plots = false
+
+
+[eigenvalues]
+all = false
+
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.5
+transient = 5.0
