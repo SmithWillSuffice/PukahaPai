@@ -1,37 +1,33 @@
 # -*- coding: utf-8 -*-
-# pendulum_gui.jl - DAE GUI version
+# pendulum_gui.jl - generated GUI solver
 
 using DifferentialEquations
-using Sundials
+
 using Mmap
 using Sockets
 using SharedArrays
 
 using LinearAlgebra, ForwardDiff
 
+
+
+function rhs_vector(u, p, t)
+    out = similar(u)
+    rhs!(out, u, p, t)
+    return out
+end
+
 function compute_ode_jacobian(integrator)
     u = integrator.u
-    du = integrator.du
     p = integrator.p
     t = integrator.t
-
-    # dae! defines F(du,u,t) = du - f(u,t), so the ODE Jacobian is
-    # J_ode = df/du = -dF/du when du is held fixed.
-    J_residual = ForwardDiff.jacobian(u_var -> begin
-        tmp = similar(u_var)
-        dae!(tmp, du, u_var, p, t)
-        return tmp
-    end, u)
-
-    J_ode = -J_residual
-    return J_ode
+    return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
 
 
 function compute_jacobian_and_eigenvals(integrator)
-    J_ode = compute_ode_jacobian(integrator)
-    return eigvals(J_ode)
+    return eigvals(compute_ode_jacobian(integrator))
 end
 
 
@@ -49,6 +45,15 @@ function make_largest_lyapunov_state(n, t_start)
     v = ones(Float64, n)
     v ./= norm(v)
     return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+function propagate_tangent_rk4!(v, J, h)
+    k1 = J * v
+    k2 = J * (v .+ (0.5 * h) .* k1)
+    k3 = J * (v .+ (0.5 * h) .* k2)
+    k4 = J * (v .+ h .* k3)
+    v .+= (h / 6.0) .* (k1 .+ 2.0 .* k2 .+ 2.0 .* k3 .+ k4)
+    return nothing
 end
 
 function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
@@ -76,7 +81,7 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
     end
 
     J = compute_ode_jacobian(integrator)
-    state.v .= exp(J * delta_t) * state.v
+    propagate_tangent_rk4!(state.v, J, delta_t)
     state.elapsed += delta_t
     state.since_renormalize += delta_t
     state.last_t = t
@@ -88,11 +93,9 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
             state.v ./= stretch
             lambda_max = state.log_sum / state.elapsed
             write(outfile, "$(t),$(lambda_max)\n")
-            flush(outfile)
         end
         state.since_renormalize = 0.0
     end
-
     return false
 end
 
@@ -100,17 +103,15 @@ function finalize_largest_lyapunov!(state, outfile)
     if !state.started || state.elapsed <= 0.0 || state.since_renormalize <= eps(Float64)
         return
     end
-
     stretch = norm(state.v)
     if isfinite(stretch) && stretch > 0.0
         lambda_max = (state.log_sum + log(stretch)) / state.elapsed
         write(outfile, "$(state.last_t),$(lambda_max)\n")
-        flush(outfile)
     end
 end
 
 
-# Auto-generated struct for shared memory interop
+# Auto-generated struct for shared memory interop.
 struct pendulum_Shared
     state::UInt8
     t0::Float64
@@ -173,22 +174,33 @@ function check_gui_state()
     end
 end
 
-# Time parameters
+# Parameter snapshot used by rhs!.  It is refreshed from shared memory by the
+# GUI output callback rather than mmap-reading on every RHS evaluation.
+const GUI_PARAMS = Ref{Union{Nothing, pendulum_Shared}}(nothing)
+
 const t0 = 0.0
 const t1 = 100.0
 const dt = 0.01
+const output_dt = 0.01
+const output_flush_every = 10
 
-function dae!(out, du, u, p, t)
+function rhs!(out, u, p, t)
+    shared = GUI_PARAMS[]
+    shared === nothing && error("GUI parameters have not been initialized")
+    
+    mass = shared.mass
+    
+    length = shared.length
+    
+    damping = shared.damping
+    
+    g = shared.g
+    
+
     
     theta = u[1]
     
     omega = u[2]
-    
-
-    
-    dtheta_dt = du[1]
-    
-    domega_dt = du[2]
     
 
     
@@ -200,13 +212,26 @@ function dae!(out, du, u, p, t)
     
 
     
-    out[1] = dtheta_dt - f_theta
+    out[1] = f_theta
     
-    out[2] = domega_dt - f_omega
+    out[2] = f_omega
     
+    return nothing
+end
+
+function dae!(out, du, u, p, t)
+    rhs!(out, u, p, t)
+    
+    out[1] = du[1] - out[1]
+    
+    out[2] = du[2] - out[2]
+    
+    return nothing
 end
 
 function main()
+    GUI_PARAMS[] = read_shared_params()
+
     u0 = [
         
         0.785398,
@@ -215,12 +240,10 @@ function main()
         
     ]
 
-    du0 = zeros(2)
     tspan = (t0, t1)
-    prob = DAEProblem(
-        dae!, du0, u0, tspan,
-        differential_vars = [true, true]
-    )
+    
+    prob = ODEProblem(rhs!, u0, tspan)
+    
 
     outfile = open("models/pendulum.csv", "w")
     write(outfile, "t,theta,omega\n")
@@ -236,8 +259,18 @@ function main()
     lyapunov_state = make_largest_lyapunov_state(2, t0)
     
 
+    # GUI output is streamed, so flush periodically rather than once per row.
+    next_output_t = Ref(t0)
+    output_rows_since_flush = Ref(0)
     step_callback = function (integrator)
-        t = integrator.t
+        # Refresh GUI-controlled parameters at the output cadence, not at every
+        # internal RHS evaluation.
+        GUI_PARAMS[] = read_shared_params()
+        t = Float64(integrator.t)
+        if t + eps(Float64) < next_output_t[]
+            return false
+        end
+
         y = integrator.u
         write(outfile, string(t))
         
@@ -246,9 +279,22 @@ function main()
         write(outfile, "," * string(y[2]))
         
         write(outfile, "\n")
-        flush(outfile)
+
+        output_rows_since_flush[] += 1
+        if output_rows_since_flush[] >= output_flush_every
+            flush(outfile)
+            output_rows_since_flush[] = 0
+        end
+
+        while next_output_t[] <= t + eps(Float64)
+            next_output_t[] += output_dt
+        end
         return false
     end
+
+    callbacks = Any[
+        DiscreteCallback((u,t,integrator)->true, step_callback; save_positions=(false, false)),
+    ]
 
     
     stability_callback = function (integrator)
@@ -264,11 +310,11 @@ function main()
                     write(eigen_outfile, "," * string(val))
                 end
                 write(eigen_outfile, "\n")
-                flush(eigen_outfile)
             end
         end
         return false
     end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
     
 
     
@@ -281,25 +327,26 @@ function main()
             renormalize_dt=0.1,
         )
     end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
     
 
-    callbacks = Any[
-        DiscreteCallback((u,t,integrator)->true, step_callback),
-    ]
-    
-    push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback))
-    
-    
-    push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback))
-    
     cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
 
-    sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+    sol = solve(
+        prob, Tsit5();
+        dt=dt,
+        adaptive=false,
+        save_everystep=false,
+        callback=cb,
+        abstol=1e-08,
+        reltol=1e-06,
+    )
 
     
     finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
     
 
+    flush(outfile)
     close(outfile)
     
     close(eigen_outfile)
@@ -307,7 +354,7 @@ function main()
     
     close(lyapunov_outfile)
     
-    println("GUI simulation completed successfully")
+    println("GUI simulation completed successfully using Tsit5() on a ODEProblem")
 end
 
 main()

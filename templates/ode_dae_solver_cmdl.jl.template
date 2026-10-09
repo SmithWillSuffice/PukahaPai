@@ -1,34 +1,74 @@
 # -*- coding: utf-8 -*-
-# {{ model_name }}_cmdl.jl - DAE Command-line version
+# {{ model_name }}_cmdl.jl - generated command-line solver
 
 using DifferentialEquations
-using Sundials  # For IDA solver
+{% if solver_is_dae %}
+using Sundials
+{% endif %}
 {% if jacobian_enabled %}
 using LinearAlgebra, ForwardDiff
+{% endif %}
 
+# Parameters
+{% for name, value in parameters.items() %}
+const {{ name }} = {{ value }}
+{% endfor %}
+
+# Time/output parameters
+const t0 = {{ t0 }}
+const t1 = {{ t1 }}
+const dt = {{ dt }}
+const output_dt = {{ output_dt }}
+
+# Explicit right-hand side shared by ODE and DAE modes.
+function rhs!(out, u, p, t)
+    {% for name in variable_names %}
+    {{ name }} = u[{{ loop.index }}]
+    {% endfor %}
+
+    {% for name, expr in auxiliary_equations.items() %}
+    {{ name }} = {{ expr }}
+    {% endfor %}
+
+    {% for name, expr in derivative_computations %}
+    {{ name }} = {{ expr }}
+    {% endfor %}
+
+    {% for name in variable_names %}
+    out[{{ loop.index }}] = f_{{ name }}
+    {% endfor %}
+    return nothing
+end
+
+# Residual wrapper required only by DAE solvers such as IDA.
+function dae!(out, du, u, p, t)
+    rhs!(out, u, p, t)
+    {% for name in variable_names %}
+    out[{{ loop.index }}] = du[{{ loop.index }}] - out[{{ loop.index }}]
+    {% endfor %}
+    return nothing
+end
+
+{% if jacobian_enabled %}
+function rhs_vector(u, p, t)
+    out = similar(u)
+    rhs!(out, u, p, t)
+    return out
+end
+
+# Differentiate the explicit ODE RHS directly.  This avoids the historical
+# residual-Jacobian sign ambiguity even when IDA is selected for integration.
 function compute_ode_jacobian(integrator)
     u = integrator.u
-    du = integrator.du
     p = integrator.p
     t = integrator.t
-
-    # dae! defines F(du,u,t) = du - f(u,t).
-    # Holding du fixed gives dF/du = -df/du, hence J_ode = -J_residual.
-    J_residual = ForwardDiff.jacobian(u_var -> begin
-        tmp = similar(u_var)
-        dae!(tmp, du, u_var, p, t)
-        return tmp
-    end, u)
-
-    J_ode = -J_residual
-    return J_ode
+    return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 {% endif %}
 
 {% if eigenvalue_enabled %}
 function compute_jacobian_and_eigenvals(integrator)
-    J_ode = compute_ode_jacobian(integrator)
-    return eigvals(J_ode)
+    return eigvals(compute_ode_jacobian(integrator))
 end
 {% endif %}
 
@@ -46,6 +86,18 @@ function make_largest_lyapunov_state(n, t_start)
     v = ones(Float64, n)
     v ./= norm(v)
     return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+# Fourth-order approximation to exp(J*h)*v for a frozen Jacobian J.
+# This removes a dense matrix exponential from every solver step while keeping
+# the same piecewise-constant-J approximation used by the original diagnostic.
+function propagate_tangent_rk4!(v, J, h)
+    k1 = J * v
+    k2 = J * (v .+ (0.5 * h) .* k1)
+    k3 = J * (v .+ (0.5 * h) .* k2)
+    k4 = J * (v .+ h .* k3)
+    v .+= (h / 6.0) .* (k1 .+ 2.0 .* k2 .+ 2.0 .* k3 .+ k4)
+    return nothing
 end
 
 function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
@@ -72,11 +124,8 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
         return false
     end
 
-    # Piecewise-constant propagation of the tangent equation dv/dt = J(t)v.
-    # The matrix exponential is considerably more accurate than one Euler step
-    # while keeping the Lyapunov diagnostic independent of the state integrator.
     J = compute_ode_jacobian(integrator)
-    state.v .= exp(J * delta_t) * state.v
+    propagate_tangent_rk4!(state.v, J, delta_t)
     state.elapsed += delta_t
     state.since_renormalize += delta_t
     state.last_t = t
@@ -88,7 +137,6 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
             state.v ./= stretch
             lambda_max = state.log_sum / state.elapsed
             write(outfile, "$(t),$(lambda_max)\n")
-            flush(outfile)
         end
         state.since_renormalize = 0.0
     end
@@ -105,67 +153,27 @@ function finalize_largest_lyapunov!(state, outfile)
     if isfinite(stretch) && stretch > 0.0
         lambda_max = (state.log_sum + log(stretch)) / state.elapsed
         write(outfile, "$(state.last_t),$(lambda_max)\n")
-        flush(outfile)
     end
 end
 {% endif %}
 
-# Parameters
-{% for name, value in parameters.items() %}
-const {{ name }} = {{ value }}
-{% endfor %}
-
-# Time parameters
-const t0 = {{ t0 }}
-const t1 = {{ t1 }}
-const dt = {{ dt }}
-
-function dae!(out, du, u, p, t)
-    # Extract state variables
-    {% for name in variable_names %}
-    {{ name }} = u[{{ loop.index }}]
-    {% endfor %}
-
-    # Extract derivatives
-    {% for name in variable_names %}
-    d{{ name }}_dt = du[{{ loop.index }}]
-    {% endfor %}
-
-    # Auxiliary equations
-    {% for name, expr in auxiliary_equations.items() %}
-    {{ name }} = {{ expr }}
-    {% endfor %}
-
-    # Compute f_<var> expressions
-    {% for name, expr in derivative_computations %}
-    {{ name }} = {{ expr }}
-    {% endfor %}
-
-    {% for name in variable_names %}
-    out[{{ loop.index }}] = d{{ name }}_dt - f_{{ name }}
-    {% endfor %}
-end
-
-# Initial conditions for state variables
+# Initial conditions follow [variables].names order.
 u0 = [
-    {% for name, value in initial_conditions.items() %}
-    {{ value }}{% if not loop.last %},{% endif %}
+    {% for name in variable_names %}
+    {{ initial_conditions[name] }}{% if not loop.last %},{% endif %}
     {% endfor %}
 ]
 
-# Initial guess for derivatives (can be zeros)
-du0 = zeros({{ variable_count }})
-
-# Problem setup
 tspan = (t0, t1)
+{% if solver_is_dae %}
+du0 = zeros({{ variable_count }})
 prob = DAEProblem(
     dae!, du0, u0, tspan,
     differential_vars = [{{ differential_vars_list | join(", ") }}]
 )
-
-# Output files
-outfile = open("models/{{ model_name }}.csv", "w")
-write(outfile, "t,{{ variable_names | join(",") }}\n")
+{% else %}
+prob = ODEProblem(rhs!, u0, tspan)
+{% endif %}
 
 {% if eigenvalue_enabled %}
 eigen_outfile = open("models/{{ model_name }}_eigen.csv", "w")
@@ -178,22 +186,11 @@ write(lyapunov_outfile, "t,lambda_max\n")
 lyapunov_state = make_largest_lyapunov_state({{ variable_count }}, t0)
 {% endif %}
 
-# Callback for writing state results
-step_callback = function (integrator)
-    t = integrator.t
-    y = integrator.u
-    write(outfile, string(t))
-    {% for name in variable_names %}
-    write(outfile, "," * string(y[{{ loop.index }}]))
-    {% endfor %}
-    write(outfile, "\n")
-    flush(outfile)
-    return false
-end
+callbacks = Any[]
 
 {% if eigenvalue_enabled %}
 stability_callback = function (integrator)
-    if integrator.iter % 50 == 0
+    if integrator.iter % {{ eigenvalue_every_n_steps }} == 0
         eigs = compute_jacobian_and_eigenvals(integrator)
         max_real = maximum(real.(eigs))
         if max_real > 0
@@ -205,11 +202,11 @@ stability_callback = function (integrator)
                 write(eigen_outfile, "," * string(val))
             end
             write(eigen_outfile, "\n")
-            flush(eigen_outfile)
         end
     end
     return false
 end
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
 {% endif %}
 
 {% if lyapunov_enabled %}
@@ -222,32 +219,59 @@ lyapunov_callback = function (integrator)
         renormalize_dt={{ lyapunov_renormalize_dt }},
     )
 end
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
 {% endif %}
 
-callbacks = Any[
-    DiscreteCallback((u,t,integrator)->true, step_callback),
-]
-{% if eigenvalue_enabled %}
-push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback))
-{% endif %}
-{% if lyapunov_enabled %}
-push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback))
-{% endif %}
-cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
+cb = Base.isempty(callbacks) ? nothing :
+     (Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...))
 
-# Solve the DAE
-sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+# Honour the TOML-selected DifferentialEquations.jl algorithm.
+if cb === nothing
+    sol = solve(
+        prob, {{ solver_constructor }};
+        dt=dt,
+        adaptive={{ adaptive }},
+        saveat=output_dt,
+        save_everystep=false,
+        abstol={{ abstol }},
+        reltol={{ reltol }},
+    )
+else
+    sol = solve(
+        prob, {{ solver_constructor }};
+        dt=dt,
+        adaptive={{ adaptive }},
+        saveat=output_dt,
+        save_everystep=false,
+        callback=cb,
+        abstol={{ abstol }},
+        reltol={{ reltol }},
+    )
+end
 
 {% if lyapunov_enabled %}
 finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
 {% endif %}
 
-# Cleanup
-close(outfile)
+# Command-line runs are not streamed to another process: write the saved
+# solution in one buffered pass after integration instead of flushing each row.
+open("models/{{ model_name }}.csv", "w") do outfile
+    write(outfile, "t,{{ variable_names | join(",") }}\n")
+    for i in eachindex(sol.t)
+        write(outfile, string(sol.t[i]))
+        y = sol.u[i]
+        {% for name in variable_names %}
+        write(outfile, "," * string(y[{{ loop.index }}]))
+        {% endfor %}
+        write(outfile, "\n")
+    end
+end
+
 {% if eigenvalue_enabled %}
 close(eigen_outfile)
 {% endif %}
 {% if lyapunov_enabled %}
 close(lyapunov_outfile)
 {% endif %}
-println("Simulation completed successfully")
+
+println("Simulation completed successfully using {{ solver_constructor }} on a {{ problem_type | upper }}Problem")

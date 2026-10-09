@@ -102,12 +102,19 @@ def test_lorenz_unstable_model_starts_at_unstable_equilibrium():
     assert not is_locally_stable(eigs)
 
 
-def test_both_julia_templates_correct_residual_jacobian_sign():
+def test_both_julia_templates_differentiate_explicit_rhs_directly():
+    """
+    Regression test for the old residual-Jacobian sign bug.
+
+    The generated templates now construct an explicit rhs! even when IDA is
+    selected, so stability differentiates f(u,t) directly and no residual-sign
+    conversion is needed in generated Julia code.
+    """
     for name in (
         "ode_dae_solver_cmdl.jl.template",
         "ode_dae_solver_gui.jl.template",
     ):
         text = (TEMPLATE_DIR / name).read_text()
-        assert "J_residual = ForwardDiff.jacobian" in text
-        assert "J_ode = -J_residual" in text
-        assert "return eigvals(J_ode)" in text
+        assert "ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)" in text
+        assert "J_ode = -J_residual" not in text
+        assert "return eigvals(compute_ode_jacobian(integrator))" in text

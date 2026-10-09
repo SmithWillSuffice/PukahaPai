@@ -1,0 +1,65 @@
+model_name = "pendulum_ida"
+
+[parameters]
+mass = 1.0
+length = 1.0
+damping = 0.1
+g = 9.81
+
+
+# Hard model-domain constraints. Only quantities listed here are validated.
+[limits.parameters.length]
+min = 0.0
+min_inclusive = false
+description = "Pendulum length appears in a denominator and must be positive"
+
+[limits.parameters.damping]
+min = 0.0
+description = "This model interprets damping as passive friction"
+
+[variables]
+names = ["theta", "omega"]
+
+[initial_conditions]
+theta = 0.785398
+omega = 0.0
+
+[equations.auxiliary]
+# none for this model
+
+[equations.ode]
+# dy/dt = f(y, t)
+# Use Julia-like syntax here
+f_theta = "omega"
+f_omega = "-damping * omega - (g / length) * sin(theta)"
+
+[tspan]
+t0 = 0.0
+t1 = 100.0
+
+[solver]
+output_dt = 0.05
+flush_every = 10
+dt = 0.01
+method = "IDA"  # or "DP5", "RK4", "Rodas5", etc.
+
+[plots]
+combine_stability_lyapunov_plots = false
+
+# Optional: restrict which time series to show (omit to show all)
+time_series = ["theta", "omega"]
+
+# Optional: phase plots, list of variable pairs or triples
+# Each entry is a list of 2 or 3 variable names
+[[plots.phase]]
+vars = ["theta", "omega"]      # 2D plot
+aspect = [1.0, 1.0]        # Optional: scaling for x:y
+
+
+[eigenvalues]
+all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 20.0

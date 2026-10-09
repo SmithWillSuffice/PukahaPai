@@ -1,16 +1,117 @@
 # -*- coding: utf-8 -*-
-# lorenz_attractor_gui.jl - DAE GUI version
+# lorenz_attractor_gui.jl - generated GUI solver
 
 using DifferentialEquations
-using Sundials
+
 using Mmap
 using Sockets
 using SharedArrays
 
-# Functions for getting eigenvalues (optional)
+using LinearAlgebra, ForwardDiff
 
 
-# Auto-generated struct for shared memory interop
+
+function rhs_vector(u, p, t)
+    out = similar(u)
+    rhs!(out, u, p, t)
+    return out
+end
+
+function compute_ode_jacobian(integrator)
+    u = integrator.u
+    p = integrator.p
+    t = integrator.t
+    return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
+end
+
+
+
+function compute_jacobian_and_eigenvals(integrator)
+    return eigvals(compute_ode_jacobian(integrator))
+end
+
+
+
+mutable struct LargestLyapunovState
+    v::Vector{Float64}
+    log_sum::Float64
+    elapsed::Float64
+    since_renormalize::Float64
+    last_t::Float64
+    started::Bool
+end
+
+function make_largest_lyapunov_state(n, t_start)
+    v = ones(Float64, n)
+    v ./= norm(v)
+    return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+function propagate_tangent_rk4!(v, J, h)
+    k1 = J * v
+    k2 = J * (v .+ (0.5 * h) .* k1)
+    k3 = J * (v .+ (0.5 * h) .* k2)
+    k4 = J * (v .+ h .* k3)
+    v .+= (h / 6.0) .* (k1 .+ 2.0 .* k2 .+ 2.0 .* k3 .+ k4)
+    return nothing
+end
+
+function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
+    t = Float64(integrator.t)
+    analysis_start = t0 + transient
+
+    if !state.started
+        if t < analysis_start
+            state.last_t = t
+            return false
+        end
+        state.v .= 1.0
+        state.v ./= norm(state.v)
+        state.log_sum = 0.0
+        state.elapsed = 0.0
+        state.since_renormalize = 0.0
+        state.last_t = t
+        state.started = true
+        return false
+    end
+
+    delta_t = t - state.last_t
+    if delta_t <= 0.0
+        return false
+    end
+
+    J = compute_ode_jacobian(integrator)
+    propagate_tangent_rk4!(state.v, J, delta_t)
+    state.elapsed += delta_t
+    state.since_renormalize += delta_t
+    state.last_t = t
+
+    if state.since_renormalize + eps(Float64) >= renormalize_dt
+        stretch = norm(state.v)
+        if isfinite(stretch) && stretch > 0.0
+            state.log_sum += log(stretch)
+            state.v ./= stretch
+            lambda_max = state.log_sum / state.elapsed
+            write(outfile, "$(t),$(lambda_max)\n")
+        end
+        state.since_renormalize = 0.0
+    end
+    return false
+end
+
+function finalize_largest_lyapunov!(state, outfile)
+    if !state.started || state.elapsed <= 0.0 || state.since_renormalize <= eps(Float64)
+        return
+    end
+    stretch = norm(state.v)
+    if isfinite(stretch) && stretch > 0.0
+        lambda_max = (state.log_sum + log(stretch)) / state.elapsed
+        write(outfile, "$(state.last_t),$(lambda_max)\n")
+    end
+end
+
+
+# Auto-generated struct for shared memory interop.
 struct lorenz_attractor_Shared
     state::UInt8
     t0::Float64
@@ -71,13 +172,27 @@ function check_gui_state()
     end
 end
 
-# Time parameters
+# Parameter snapshot used by rhs!.  It is refreshed from shared memory by the
+# GUI output callback rather than mmap-reading on every RHS evaluation.
+const GUI_PARAMS = Ref{Union{Nothing, lorenz_attractor_Shared}}(nothing)
+
 const t0 = 0.0
 const t1 = 40.0
 const dt = 0.01
+const output_dt = 0.01
+const output_flush_every = 10
 
-function dae!(out, du, u, p, t)
-    # Extract state variables
+function rhs!(out, u, p, t)
+    shared = GUI_PARAMS[]
+    shared === nothing && error("GUI parameters have not been initialized")
+    
+    sigma = shared.sigma
+    
+    rho = shared.rho
+    
+    beta = shared.beta
+    
+
     
     x = u[1]
     
@@ -86,19 +201,8 @@ function dae!(out, du, u, p, t)
     z = u[3]
     
 
-    # Extract derivatives
-    
-    dx_dt = du[1]
-    
-    dy_dt = du[2]
-    
-    dz_dt = du[3]
     
 
-    # Auxiliary equations
-    
-
-    # Compute f_<var> expressions
     
     f_x = sigma * (y - x)
     
@@ -108,16 +212,30 @@ function dae!(out, du, u, p, t)
     
 
     
-    out[1] = dx_dt - f_x
+    out[1] = f_x
     
-    out[2] = dy_dt - f_y
+    out[2] = f_y
     
-    out[3] = dz_dt - f_z
+    out[3] = f_z
     
+    return nothing
+end
+
+function dae!(out, du, u, p, t)
+    rhs!(out, u, p, t)
+    
+    out[1] = du[1] - out[1]
+    
+    out[2] = du[2] - out[2]
+    
+    out[3] = du[3] - out[3]
+    
+    return nothing
 end
 
 function main()
-    # Initial conditions for state variables
+    GUI_PARAMS[] = read_shared_params()
+
     u0 = [
         
         1.0,
@@ -128,21 +246,37 @@ function main()
         
     ]
 
-    # Initial guess for derivatives (can be zeros)
-    du0 = zeros(3)
-
-    # Problem setup
     tspan = (t0, t1)
-    prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true, true])
-
-    # Callback for writing results to a file for GUI visualization
-    # In a production GUI, this would write to shared memory.
-    outfile = open("models/lorenz_attractor.csv", "w")
     
+    prob = ODEProblem(rhs!, u0, tspan)
+    
+
+    outfile = open("models/lorenz_attractor.csv", "w")
     write(outfile, "t,x,y,z\n")
 
+    
+    eigen_outfile = open("models/lorenz_attractor_eigen.csv", "w")
+    write(eigen_outfile, "t,e1,e2,e3\n")
+    
+
+    
+    lyapunov_outfile = open("models/lorenz_attractor_lyapunov.csv", "w")
+    write(lyapunov_outfile, "t,lambda_max\n")
+    lyapunov_state = make_largest_lyapunov_state(3, t0)
+    
+
+    # GUI output is streamed, so flush periodically rather than once per row.
+    next_output_t = Ref(t0)
+    output_rows_since_flush = Ref(0)
     step_callback = function (integrator)
-        t = integrator.t
+        # Refresh GUI-controlled parameters at the output cadence, not at every
+        # internal RHS evaluation.
+        GUI_PARAMS[] = read_shared_params()
+        t = Float64(integrator.t)
+        if t + eps(Float64) < next_output_t[]
+            return false
+        end
+
         y = integrator.u
         write(outfile, string(t))
         
@@ -153,18 +287,82 @@ function main()
         write(outfile, "," * string(y[3]))
         
         write(outfile, "\n")
-        flush(outfile)
+
+        output_rows_since_flush[] += 1
+        if output_rows_since_flush[] >= output_flush_every
+            flush(outfile)
+            output_rows_since_flush[] = 0
+        end
+
+        while next_output_t[] <= t + eps(Float64)
+            next_output_t[] += output_dt
+        end
         return false
     end
-    
-    cb = DiscreteCallback((f,t,integrator)->true, step_callback)
-    
-    sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
 
+    callbacks = Any[
+        DiscreteCallback((u,t,integrator)->true, step_callback; save_positions=(false, false)),
+    ]
+
+    
+    stability_callback = function (integrator)
+        if integrator.iter % 50 == 0
+            eigs = compute_jacobian_and_eigenvals(integrator)
+            max_real = maximum(real.(eigs))
+            if max_real > 0
+                println("Locally unstable at t=$(integrator.t), max eigenvalue real part: $max_real")
+            end
+            if isopen(eigen_outfile)
+                write(eigen_outfile, string(integrator.t))
+                for val in eigs
+                    write(eigen_outfile, "," * string(val))
+                end
+                write(eigen_outfile, "\n")
+            end
+        end
+        return false
+    end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
+    
+
+    
+    lyapunov_callback = function (integrator)
+        return update_largest_lyapunov!(
+            integrator,
+            lyapunov_state,
+            lyapunov_outfile;
+            transient=5.0,
+            renormalize_dt=0.1,
+        )
+    end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
+    
+
+    cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
+
+    sol = solve(
+        prob, Tsit5();
+        dt=dt,
+        adaptive=false,
+        save_everystep=false,
+        callback=cb,
+        abstol=1e-08,
+        reltol=1e-06,
+    )
+
+    
+    finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
+    
+
+    flush(outfile)
     close(outfile)
     
-    println("GUI simulation completed successfully")
+    close(eigen_outfile)
+    
+    
+    close(lyapunov_outfile)
+    
+    println("GUI simulation completed successfully using Tsit5() on a ODEProblem")
 end
 
-# Execute main function
 main()

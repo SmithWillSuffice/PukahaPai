@@ -1,34 +1,84 @@
 # -*- coding: utf-8 -*-
-# pendulum_cmdl.jl - DAE Command-line version
+# pendulum_cmdl.jl - generated command-line solver
 
 using DifferentialEquations
-using Sundials  # For IDA solver
+
 
 using LinearAlgebra, ForwardDiff
 
+
+# Parameters
+
+const mass = 1.0
+
+const length = 1.0
+
+const damping = 0.1
+
+const g = 9.81
+
+
+# Time/output parameters
+const t0 = 0.0
+const t1 = 100.0
+const dt = 0.01
+const output_dt = 0.01
+
+# Explicit right-hand side shared by ODE and DAE modes.
+function rhs!(out, u, p, t)
+    
+    theta = u[1]
+    
+    omega = u[2]
+    
+
+    
+
+    
+    f_theta = omega
+    
+    f_omega = -damping * omega - (g / length) * sin(theta)
+    
+
+    
+    out[1] = f_theta
+    
+    out[2] = f_omega
+    
+    return nothing
+end
+
+# Residual wrapper required only by DAE solvers such as IDA.
+function dae!(out, du, u, p, t)
+    rhs!(out, u, p, t)
+    
+    out[1] = du[1] - out[1]
+    
+    out[2] = du[2] - out[2]
+    
+    return nothing
+end
+
+
+function rhs_vector(u, p, t)
+    out = similar(u)
+    rhs!(out, u, p, t)
+    return out
+end
+
+# Differentiate the explicit ODE RHS directly.  This avoids the historical
+# residual-Jacobian sign ambiguity even when IDA is selected for integration.
 function compute_ode_jacobian(integrator)
     u = integrator.u
-    du = integrator.du
     p = integrator.p
     t = integrator.t
-
-    # dae! defines F(du,u,t) = du - f(u,t).
-    # Holding du fixed gives dF/du = -df/du, hence J_ode = -J_residual.
-    J_residual = ForwardDiff.jacobian(u_var -> begin
-        tmp = similar(u_var)
-        dae!(tmp, du, u_var, p, t)
-        return tmp
-    end, u)
-
-    J_ode = -J_residual
-    return J_ode
+    return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
 
 
 function compute_jacobian_and_eigenvals(integrator)
-    J_ode = compute_ode_jacobian(integrator)
-    return eigvals(J_ode)
+    return eigvals(compute_ode_jacobian(integrator))
 end
 
 
@@ -46,6 +96,18 @@ function make_largest_lyapunov_state(n, t_start)
     v = ones(Float64, n)
     v ./= norm(v)
     return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+# Fourth-order approximation to exp(J*h)*v for a frozen Jacobian J.
+# This removes a dense matrix exponential from every solver step while keeping
+# the same piecewise-constant-J approximation used by the original diagnostic.
+function propagate_tangent_rk4!(v, J, h)
+    k1 = J * v
+    k2 = J * (v .+ (0.5 * h) .* k1)
+    k3 = J * (v .+ (0.5 * h) .* k2)
+    k4 = J * (v .+ h .* k3)
+    v .+= (h / 6.0) .* (k1 .+ 2.0 .* k2 .+ 2.0 .* k3 .+ k4)
+    return nothing
 end
 
 function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
@@ -72,11 +134,8 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
         return false
     end
 
-    # Piecewise-constant propagation of the tangent equation dv/dt = J(t)v.
-    # The matrix exponential is considerably more accurate than one Euler step
-    # while keeping the Lyapunov diagnostic independent of the state integrator.
     J = compute_ode_jacobian(integrator)
-    state.v .= exp(J * delta_t) * state.v
+    propagate_tangent_rk4!(state.v, J, delta_t)
     state.elapsed += delta_t
     state.since_renormalize += delta_t
     state.last_t = t
@@ -88,7 +147,6 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
             state.v ./= stretch
             lambda_max = state.log_sum / state.elapsed
             write(outfile, "$(t),$(lambda_max)\n")
-            flush(outfile)
         end
         state.since_renormalize = 0.0
     end
@@ -105,60 +163,11 @@ function finalize_largest_lyapunov!(state, outfile)
     if isfinite(stretch) && stretch > 0.0
         lambda_max = (state.log_sum + log(stretch)) / state.elapsed
         write(outfile, "$(state.last_t),$(lambda_max)\n")
-        flush(outfile)
     end
 end
 
 
-# Parameters
-
-const mass = 1.0
-
-const length = 1.0
-
-const damping = 0.1
-
-const g = 9.81
-
-
-# Time parameters
-const t0 = 0.0
-const t1 = 100.0
-const dt = 0.01
-
-function dae!(out, du, u, p, t)
-    # Extract state variables
-    
-    theta = u[1]
-    
-    omega = u[2]
-    
-
-    # Extract derivatives
-    
-    dtheta_dt = du[1]
-    
-    domega_dt = du[2]
-    
-
-    # Auxiliary equations
-    
-
-    # Compute f_<var> expressions
-    
-    f_theta = omega
-    
-    f_omega = -damping * omega - (g / length) * sin(theta)
-    
-
-    
-    out[1] = dtheta_dt - f_theta
-    
-    out[2] = domega_dt - f_omega
-    
-end
-
-# Initial conditions for state variables
+# Initial conditions follow [variables].names order.
 u0 = [
     
     0.785398,
@@ -167,19 +176,10 @@ u0 = [
     
 ]
 
-# Initial guess for derivatives (can be zeros)
-du0 = zeros(2)
-
-# Problem setup
 tspan = (t0, t1)
-prob = DAEProblem(
-    dae!, du0, u0, tspan,
-    differential_vars = [true, true]
-)
 
-# Output files
-outfile = open("models/pendulum.csv", "w")
-write(outfile, "t,theta,omega\n")
+prob = ODEProblem(rhs!, u0, tspan)
+
 
 
 eigen_outfile = open("models/pendulum_eigen.csv", "w")
@@ -192,20 +192,7 @@ write(lyapunov_outfile, "t,lambda_max\n")
 lyapunov_state = make_largest_lyapunov_state(2, t0)
 
 
-# Callback for writing state results
-step_callback = function (integrator)
-    t = integrator.t
-    y = integrator.u
-    write(outfile, string(t))
-    
-    write(outfile, "," * string(y[1]))
-    
-    write(outfile, "," * string(y[2]))
-    
-    write(outfile, "\n")
-    flush(outfile)
-    return false
-end
+callbacks = Any[]
 
 
 stability_callback = function (integrator)
@@ -221,11 +208,11 @@ stability_callback = function (integrator)
                 write(eigen_outfile, "," * string(val))
             end
             write(eigen_outfile, "\n")
-            flush(eigen_outfile)
         end
     end
     return false
 end
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
 
 
 
@@ -238,32 +225,61 @@ lyapunov_callback = function (integrator)
         renormalize_dt=0.1,
     )
 end
+push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
 
 
-callbacks = Any[
-    DiscreteCallback((u,t,integrator)->true, step_callback),
-]
+cb = Base.isempty(callbacks) ? nothing :
+     (Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...))
 
-push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback))
-
-
-push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback))
-
-cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
-
-# Solve the DAE
-sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+# Honour the TOML-selected DifferentialEquations.jl algorithm.
+if cb === nothing
+    sol = solve(
+        prob, Tsit5();
+        dt=dt,
+        adaptive=false,
+        saveat=output_dt,
+        save_everystep=false,
+        abstol=1e-08,
+        reltol=1e-06,
+    )
+else
+    sol = solve(
+        prob, Tsit5();
+        dt=dt,
+        adaptive=false,
+        saveat=output_dt,
+        save_everystep=false,
+        callback=cb,
+        abstol=1e-08,
+        reltol=1e-06,
+    )
+end
 
 
 finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
 
 
-# Cleanup
-close(outfile)
+# Command-line runs are not streamed to another process: write the saved
+# solution in one buffered pass after integration instead of flushing each row.
+open("models/pendulum.csv", "w") do outfile
+    write(outfile, "t,theta,omega\n")
+    for i in eachindex(sol.t)
+        write(outfile, string(sol.t[i]))
+        y = sol.u[i]
+        
+        write(outfile, "," * string(y[1]))
+        
+        write(outfile, "," * string(y[2]))
+        
+        write(outfile, "\n")
+    end
+end
+
 
 close(eigen_outfile)
 
 
 close(lyapunov_outfile)
 
-println("Simulation completed successfully")
+
+println("Simulation completed successfully using Tsit5() on a ODEProblem")

@@ -5,7 +5,7 @@ model_validation
 
 Shared TOML model validation utilities for PukahaPai.
 
-The model developer may (optionally) specify hard admissibility limits in the
+The model developer may optionally specify hard admissibility limits in the
 TOML file under
 
     [limits.parameters.<name>]

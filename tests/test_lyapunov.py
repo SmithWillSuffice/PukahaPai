@@ -211,8 +211,10 @@ def test_generator_renders_lyapunov_support(tmp_path, monkeypatch):
     assert 'pendulum_lyapunov.csv' in generated
     assert 'write(lyapunov_outfile, "t,lambda_max\\n")' in generated
     assert "compute_ode_jacobian" in generated
-    assert "J_ode = -J_residual" in generated
-    assert "exp(J * delta_t)" in generated
+    assert "ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)" in generated
+    assert "J_ode = -J_residual" not in generated
+    assert "propagate_tangent_rk4!" in generated
+    assert "exp(J * delta_t)" not in generated
     assert "renormalize_dt=0.1" in generated
     assert "transient=20.0" in generated
 

@@ -1,0 +1,66 @@
+model_name = "lorenz_attractor_tsit5"
+
+[parameters]
+sigma = 10.0
+rho = 28.0
+beta = 2.6
+
+
+# Physical Lorenz-convection parameter domain. The mathematical ODEs can be
+# extended outside this domain, but this saved model is intended to represent
+# the standard convection interpretation.
+[limits.parameters.sigma]
+min = 0.0
+min_inclusive = false
+description = "Prandtl-like parameter sigma must be positive"
+
+[limits.parameters.rho]
+min = 0.0
+description = "Rayleigh-control parameter rho is nonnegative in this model"
+
+[limits.parameters.beta]
+min = 0.0
+min_inclusive = false
+description = "Geometric dissipation parameter beta must be positive"
+
+[variables]
+names = ["x", "y", "z"]
+
+[initial_conditions]
+x = 1.0
+y = 0.0
+z = 0.0
+
+[equations.auxiliary]
+# none for this model
+
+[equations.ode]
+f_x = "sigma * (y - x)"
+f_y = "x * (rho - z) - y"
+f_z = "x * y - beta * z"
+
+[tspan]
+t0 = 0.0
+t1 = 40.0
+
+[solver]
+output_dt = 0.05
+flush_every = 10
+dt = 0.01
+method = "Tsit5"
+
+[plots]
+# Leave out time_series to include all by default
+
+[[plots.phase]]
+vars = ["x", "y", "z"]
+aspect = [1.0, 1.0, 1.0]
+
+
+[eigenvalues]
+all = true
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.1
+transient = 5.0

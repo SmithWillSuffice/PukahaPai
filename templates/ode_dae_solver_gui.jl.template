@@ -1,37 +1,35 @@
 # -*- coding: utf-8 -*-
-# {{ model_name }}_gui.jl - DAE GUI version
+# {{ model_name }}_gui.jl - generated GUI solver
 
 using DifferentialEquations
+{% if solver_is_dae %}
 using Sundials
+{% endif %}
 using Mmap
 using Sockets
 using SharedArrays
 {% if jacobian_enabled %}
 using LinearAlgebra, ForwardDiff
+{% endif %}
+
+{% if jacobian_enabled %}
+function rhs_vector(u, p, t)
+    out = similar(u)
+    rhs!(out, u, p, t)
+    return out
+end
 
 function compute_ode_jacobian(integrator)
     u = integrator.u
-    du = integrator.du
     p = integrator.p
     t = integrator.t
-
-    # dae! defines F(du,u,t) = du - f(u,t), so the ODE Jacobian is
-    # J_ode = df/du = -dF/du when du is held fixed.
-    J_residual = ForwardDiff.jacobian(u_var -> begin
-        tmp = similar(u_var)
-        dae!(tmp, du, u_var, p, t)
-        return tmp
-    end, u)
-
-    J_ode = -J_residual
-    return J_ode
+    return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 {% endif %}
 
 {% if eigenvalue_enabled %}
 function compute_jacobian_and_eigenvals(integrator)
-    J_ode = compute_ode_jacobian(integrator)
-    return eigvals(J_ode)
+    return eigvals(compute_ode_jacobian(integrator))
 end
 {% endif %}
 
@@ -49,6 +47,15 @@ function make_largest_lyapunov_state(n, t_start)
     v = ones(Float64, n)
     v ./= norm(v)
     return LargestLyapunovState(v, 0.0, 0.0, 0.0, Float64(t_start), false)
+end
+
+function propagate_tangent_rk4!(v, J, h)
+    k1 = J * v
+    k2 = J * (v .+ (0.5 * h) .* k1)
+    k3 = J * (v .+ (0.5 * h) .* k2)
+    k4 = J * (v .+ h .* k3)
+    v .+= (h / 6.0) .* (k1 .+ 2.0 .* k2 .+ 2.0 .* k3 .+ k4)
+    return nothing
 end
 
 function update_largest_lyapunov!(integrator, state, outfile; transient, renormalize_dt)
@@ -76,7 +83,7 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
     end
 
     J = compute_ode_jacobian(integrator)
-    state.v .= exp(J * delta_t) * state.v
+    propagate_tangent_rk4!(state.v, J, delta_t)
     state.elapsed += delta_t
     state.since_renormalize += delta_t
     state.last_t = t
@@ -88,11 +95,9 @@ function update_largest_lyapunov!(integrator, state, outfile; transient, renorma
             state.v ./= stretch
             lambda_max = state.log_sum / state.elapsed
             write(outfile, "$(t),$(lambda_max)\n")
-            flush(outfile)
         end
         state.since_renormalize = 0.0
     end
-
     return false
 end
 
@@ -100,17 +105,15 @@ function finalize_largest_lyapunov!(state, outfile)
     if !state.started || state.elapsed <= 0.0 || state.since_renormalize <= eps(Float64)
         return
     end
-
     stretch = norm(state.v)
     if isfinite(stretch) && stretch > 0.0
         lambda_max = (state.log_sum + log(stretch)) / state.elapsed
         write(outfile, "$(state.last_t),$(lambda_max)\n")
-        flush(outfile)
     end
 end
 {% endif %}
 
-# Auto-generated struct for shared memory interop
+# Auto-generated struct for shared memory interop.
 struct {{ model_name }}_Shared
     state::UInt8
     t0::Float64
@@ -167,18 +170,25 @@ function check_gui_state()
     end
 end
 
-# Time parameters
+# Parameter snapshot used by rhs!.  It is refreshed from shared memory by the
+# GUI output callback rather than mmap-reading on every RHS evaluation.
+const GUI_PARAMS = Ref{Union{Nothing, {{ model_name }}_Shared}}(nothing)
+
 const t0 = {{ t0 }}
 const t1 = {{ t1 }}
 const dt = {{ dt }}
+const output_dt = {{ output_dt }}
+const output_flush_every = {{ flush_every }}
 
-function dae!(out, du, u, p, t)
-    {% for name in variable_names %}
-    {{ name }} = u[{{ loop.index }}]
+function rhs!(out, u, p, t)
+    shared = GUI_PARAMS[]
+    shared === nothing && error("GUI parameters have not been initialized")
+    {% for name in parameters.keys() %}
+    {{ name }} = shared.{{ name }}
     {% endfor %}
 
     {% for name in variable_names %}
-    d{{ name }}_dt = du[{{ loop.index }}]
+    {{ name }} = u[{{ loop.index }}]
     {% endfor %}
 
     {% for name, expr in auxiliary_equations.items() %}
@@ -190,23 +200,38 @@ function dae!(out, du, u, p, t)
     {% endfor %}
 
     {% for name in variable_names %}
-    out[{{ loop.index }}] = d{{ name }}_dt - f_{{ name }}
+    out[{{ loop.index }}] = f_{{ name }}
     {% endfor %}
+    return nothing
+end
+
+function dae!(out, du, u, p, t)
+    rhs!(out, u, p, t)
+    {% for name in variable_names %}
+    out[{{ loop.index }}] = du[{{ loop.index }}] - out[{{ loop.index }}]
+    {% endfor %}
+    return nothing
 end
 
 function main()
+    GUI_PARAMS[] = read_shared_params()
+
     u0 = [
-        {% for name, value in initial_conditions.items() %}
-        {{ value }}{% if not loop.last %},{% endif %}
+        {% for name in variable_names %}
+        {{ initial_conditions[name] }}{% if not loop.last %},{% endif %}
         {% endfor %}
     ]
 
-    du0 = zeros({{ variable_count }})
     tspan = (t0, t1)
+    {% if solver_is_dae %}
+    du0 = zeros({{ variable_count }})
     prob = DAEProblem(
         dae!, du0, u0, tspan,
         differential_vars = [{{ differential_vars_list | join(", ") }}]
     )
+    {% else %}
+    prob = ODEProblem(rhs!, u0, tspan)
+    {% endif %}
 
     outfile = open("models/{{ model_name }}.csv", "w")
     write(outfile, "t,{{ variable_names | join(",") }}\n")
@@ -222,21 +247,44 @@ function main()
     lyapunov_state = make_largest_lyapunov_state({{ variable_count }}, t0)
     {% endif %}
 
+    # GUI output is streamed, so flush periodically rather than once per row.
+    next_output_t = Ref(t0)
+    output_rows_since_flush = Ref(0)
     step_callback = function (integrator)
-        t = integrator.t
+        # Refresh GUI-controlled parameters at the output cadence, not at every
+        # internal RHS evaluation.
+        GUI_PARAMS[] = read_shared_params()
+        t = Float64(integrator.t)
+        if t + eps(Float64) < next_output_t[]
+            return false
+        end
+
         y = integrator.u
         write(outfile, string(t))
         {% for name in variable_names %}
         write(outfile, "," * string(y[{{ loop.index }}]))
         {% endfor %}
         write(outfile, "\n")
-        flush(outfile)
+
+        output_rows_since_flush[] += 1
+        if output_rows_since_flush[] >= output_flush_every
+            flush(outfile)
+            output_rows_since_flush[] = 0
+        end
+
+        while next_output_t[] <= t + eps(Float64)
+            next_output_t[] += output_dt
+        end
         return false
     end
 
+    callbacks = Any[
+        DiscreteCallback((u,t,integrator)->true, step_callback; save_positions=(false, false)),
+    ]
+
     {% if eigenvalue_enabled %}
     stability_callback = function (integrator)
-        if integrator.iter % 50 == 0
+        if integrator.iter % {{ eigenvalue_every_n_steps }} == 0
             eigs = compute_jacobian_and_eigenvals(integrator)
             max_real = maximum(real.(eigs))
             if max_real > 0
@@ -248,11 +296,11 @@ function main()
                     write(eigen_outfile, "," * string(val))
                 end
                 write(eigen_outfile, "\n")
-                flush(eigen_outfile)
             end
         end
         return false
     end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
     {% endif %}
 
     {% if lyapunov_enabled %}
@@ -265,25 +313,26 @@ function main()
             renormalize_dt={{ lyapunov_renormalize_dt }},
         )
     end
+    push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
     {% endif %}
 
-    callbacks = Any[
-        DiscreteCallback((u,t,integrator)->true, step_callback),
-    ]
-    {% if eigenvalue_enabled %}
-    push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback))
-    {% endif %}
-    {% if lyapunov_enabled %}
-    push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback))
-    {% endif %}
     cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
 
-    sol = solve(prob, IDA(), dt=dt, adaptive=false, callback=cb, abstol=1e-8, reltol=1e-6)
+    sol = solve(
+        prob, {{ solver_constructor }};
+        dt=dt,
+        adaptive={{ adaptive }},
+        save_everystep=false,
+        callback=cb,
+        abstol={{ abstol }},
+        reltol={{ reltol }},
+    )
 
     {% if lyapunov_enabled %}
     finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
     {% endif %}
 
+    flush(outfile)
     close(outfile)
     {% if eigenvalue_enabled %}
     close(eigen_outfile)
@@ -291,7 +340,7 @@ function main()
     {% if lyapunov_enabled %}
     close(lyapunov_outfile)
     {% endif %}
-    println("GUI simulation completed successfully")
+    println("GUI simulation completed successfully using {{ solver_constructor }} on a {{ problem_type | upper }}Problem")
 end
 
 main()

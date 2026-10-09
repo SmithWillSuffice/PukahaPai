@@ -79,7 +79,7 @@ switched to an algebraic solver,
 prob = DAEProblem(dae!, du0, u0, tspan, differential_vars = [true, true, true, true])
 ```
 which might run slower, but gives us more generality --- the cost of writing a
-general purppose package you can say. THough I have not actually compared run
+general purpose package you can say. Though I have not actually compared run
 times.
 
 ## License

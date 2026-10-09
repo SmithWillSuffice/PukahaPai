@@ -2,96 +2,98 @@
 '''
 generate_julia_odesolver.py
 ===========================
-This script generates a Julia ODE solver script based on a TOML configuration
-file. It reads the model configuration from toml config, extracts parameters,
-variables, and equations, and renders a Julia script using a Jinja-like
-template.
+Generate command-line and GUI Julia solvers from a PukahaPai TOML model.
 
-Example:
-```bash
-./generate_julia_odesolver.py pendulum
-```
-This presumes an ODES model specification `pendulum.toml` exists in
-the `./models` directory. If successful, the generated Julia code will be
-in `./models/pendulum.jl`. Another cmdl only version will be generated
-as `./models/pendulum_cmdl.jl`.
+The TOML [solver].method setting is now honoured.  The special method IDA
+selects a DAEProblem.  Any other simple DifferentialEquations.jl algorithm
+constructor name (for example Tsit5, Vern7, Rodas5P, RK4) selects an
+ODEProblem and is emitted as <method>().
 
-| Copyright: (c) 2025 Bijou M. Smith
-| License: GNU General Public License v3.0 <https://www.gnu.org/licenses/gpl-3.0.html>
+Optional solver/output settings:
+
+    [solver]
+    dt = 0.01
+    method = "Tsit5"
+    adaptive = false
+    output_dt = 0.05
+    flush_every = 10
+    abstol = 1e-8
+    reltol = 1e-6
+
+output_dt controls how often state data are written; it is independent of the
+integration step.  flush_every applies to the streaming GUI writer.  The
+command-line solver writes its saved solution after integration and therefore
+does not flush on every row.
+
+Copyright: (c) 2025-2026 Bijou M. Smith
+License: GNU General Public License v3.0 <https://www.gnu.org/licenses/gpl-3.0.html>
 '''
 
+from collections import defaultdict, deque
 from pathlib import Path
 import re
-from collections import defaultdict, deque
 
 from model_validation import ModelValidationError, load_and_validate_model
+
+
+_SOLVER_NAME_RE = re.compile(r"^(?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*(?:\(\))?$")
+
 
 def julia_type(ctype_str):
     if ctype_str == "c_double":
         return "Float64"
-    elif ctype_str == "c_int":
+    if ctype_str == "c_int":
         return "Int32"
-    elif ctype_str == "c_char":
+    if ctype_str == "c_char":
         return "UInt8"
-    else:
-        raise ValueError(f"Unsupported ctype: {ctype_str}")
+    raise ValueError(f"Unsupported ctype: {ctype_str}")
+
 
 def parse_godley_flows(godley_section):
     flows = defaultdict(list)
     for key, entry in godley_section.items():
         if len(entry) < 4:
-            raise ValueError(f"Godley table entry {key} must have 4 elements: [from, to, amount, desc]")
+            raise ValueError(
+                f"Godley table entry {key} must have 4 elements: "
+                "[from, to, amount, desc]"
+            )
         src, tgt, expr, _ = entry
         flows[src].append(f"-({expr})")
         flows[tgt].append(f"+({expr})")
     return flows
 
+
 def get_dependencies(expr: str, all_eq_names: list) -> list:
-    """
-    Finds which derivative equations an expression depends on.
-    Uses a more robust regex to find 'f_' prefixed variable names.
-    """
     dependencies = []
     for eq_name in all_eq_names:
-        # Use regex to find the equation name as a whole word
-        if re.search(r'\b' + re.escape(eq_name) + r'\b', expr):
+        if re.search(r"\b" + re.escape(eq_name) + r"\b", expr):
             dependencies.append(eq_name)
     return dependencies
 
+
 def topological_sort(ode_equations: dict) -> list:
-    """
-    Sorts ODE equations based on dependencies to prevent UndefVarError.
-    This implementation is more robust and correctly handles complex dependencies.
-    """
     graph = defaultdict(list)
     in_degree = defaultdict(int)
     all_eq_names = list(ode_equations.keys())
 
-    # Build the dependency graph and compute in-degrees
     for eq_name, expr in ode_equations.items():
-        dependencies = get_dependencies(expr, all_eq_names)
-        for dep in dependencies:
+        for dep in get_dependencies(expr, all_eq_names):
             if dep != eq_name:
                 graph[dep].append(eq_name)
                 in_degree[eq_name] += 1
 
-    # Initialize a queue with all nodes that have no incoming edges
     queue = deque([eq for eq in all_eq_names if in_degree[eq] == 0])
     sorted_equations = []
 
-    # Perform the topological sort
     while queue:
         node = queue.popleft()
         sorted_equations.append(node)
-
         for neighbor in graph[node]:
             in_degree[neighbor] -= 1
             if in_degree[neighbor] == 0:
                 queue.append(neighbor)
-    
-    # Check for cycles
+
     if len(sorted_equations) != len(ode_equations):
-        # This means there's a circular dependency.
         raise ValueError("Circular dependency detected. Cannot sort.")
 
     return sorted_equations
@@ -103,10 +105,47 @@ def render_template(template: str, context: dict) -> str:
 
 
 def substitute_expressions(expr: str, variable_names: list) -> str:
-    """Substitutes derivative variable names."""
+    """Substitute derivative variable names used inside other equations."""
     for var in variable_names:
-        expr = re.sub(rf'\bd{var}\b', f'd{var}_dt', expr)
+        expr = re.sub(rf"\bd{var}\b", f"d{var}_dt", expr)
     return expr
+
+
+def normalize_solver_method(method):
+    """
+    Return (constructor_expression, base_name).
+
+    Model files specify a constructor name such as ``Tsit5`` or ``IDA``.
+    A trailing empty ``()`` is accepted for convenience.  Dotted Julia names
+    such as ``OrdinaryDiffEq.Tsit5`` are also accepted.  Arbitrary Julia code
+    is rejected so a typo cannot silently become injected template source.
+    """
+    method = str(method).strip()
+    if not _SOLVER_NAME_RE.fullmatch(method):
+        raise ValueError(
+            "[solver].method must be a Julia algorithm constructor name such "
+            "as 'Tsit5', 'Rodas5P', 'RK4', or 'IDA'"
+        )
+
+    if method.endswith("()"):
+        method = method[:-2]
+
+    base_name = method.rsplit(".", 1)[-1]
+    return f"{method}()", base_name
+
+
+def _positive_float(section, name, default):
+    value = float(section.get(name, default))
+    if value <= 0.0:
+        raise ValueError(f"[solver].{name} must be > 0")
+    return value
+
+
+def _positive_int(section, name, default):
+    value = int(section.get(name, default))
+    if value <= 0:
+        raise ValueError(f"[solver].{name} must be a positive integer")
+    return value
 
 
 def generate_julia_code(model_name: str, template: str, gui_version: bool = False):
@@ -125,12 +164,32 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     auxiliary_equations = config.get("equations", {}).get("auxiliary", {})
     godley_flows = config.get("godley", {})
 
-    t0 = config["tspan"]["t0"]
-    t1 = config["tspan"]["t1"]
-    dt = config["solver"]["dt"]
-    method = config["solver"].get("method", "Tsit5")
+    t0 = float(config["tspan"]["t0"])
+    t1 = float(config["tspan"]["t1"])
+    solver_config = config["solver"]
+    dt = _positive_float(solver_config, "dt", 0.01)
 
-    # Merge Godley flows into ode_equations, if any
+    solver_constructor, solver_base_name = normalize_solver_method(
+        solver_config.get("method", "Tsit5")
+    )
+
+    requested_problem_type = str(solver_config.get("problem_type", "")).strip().lower()
+    if requested_problem_type and requested_problem_type not in {"ode", "dae"}:
+        raise ValueError("[solver].problem_type must be 'ode' or 'dae'")
+
+    if requested_problem_type:
+        problem_type = requested_problem_type
+    else:
+        problem_type = "dae" if solver_base_name == "IDA" else "ode"
+
+    solver_is_dae = problem_type == "dae"
+    adaptive = bool(solver_config.get("adaptive", False))
+    output_dt = _positive_float(solver_config, "output_dt", dt)
+    flush_every = _positive_int(solver_config, "flush_every", 10)
+    abstol = _positive_float(solver_config, "abstol", 1.0e-8)
+    reltol = _positive_float(solver_config, "reltol", 1.0e-6)
+
+    # Merge Godley flows into ode_equations, if any.
     ode_equations = ode_equations_toml.copy()
     godley_derivatives = parse_godley_flows(godley_flows)
     for varname, terms in godley_derivatives.items():
@@ -138,41 +197,41 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
         if eqname not in ode_equations:
             ode_equations[eqname] = " + ".join(terms)
 
-    # Sort equations topologically to ensure dependencies are met
-    try:
-        sorted_equation_names = topological_sort(ode_equations)
-    except ValueError as e:
-        raise e
+    sorted_equation_names = topological_sort(ode_equations)
 
-    # Prepare derivative computations for the template
     derivative_computations = []
     for f_var_name in sorted_equation_names:
-        original_var = f_var_name[2:]
         expr = substitute_expressions(ode_equations[f_var_name], variable_names)
         derivative_computations.append((f_var_name, expr))
 
-    # Prepare auxiliary equations
     aux_subst = {}
-    for k, v in auxiliary_equations.items():
-        expr = substitute_expressions(v, variable_names)
-        aux_subst[k] = expr
+    for key, value in auxiliary_equations.items():
+        aux_subst[key] = substitute_expressions(value, variable_names)
 
-    # Generate the list of boolean values for differential_vars
+    # Every current TOML equation is an explicit state derivative.  The DAE
+    # wrapper is therefore F(du,u,t) = du - f(u,t) when a DAE solver is chosen.
+    missing_derivatives = [
+        name for name in variable_names if f"f_{name}" not in ode_equations
+    ]
+    if missing_derivatives:
+        raise ValueError(
+            "No ODE/Godley derivative was generated for state variable(s): "
+            + ", ".join(missing_derivatives)
+        )
+
     differential_vars_list = ["true" for _ in variable_names]
 
-    # Optional local-stability and Lyapunov diagnostics.
     eigenvalue_config = config.get("eigenvalues", {})
-    eigenvalue_enabled = eigenvalue_config.get("all", False)
-    if eigenvalue_enabled:
-        use_callback_jacobian = eigenvalue_config.get("callback_jacobian", False)
-        use_forward_jacobian = eigenvalue_config.get("forward_jacobian", True)
-        eigenvalue_method = "callback" if use_callback_jacobian else "forward"
-    else:
-        eigenvalue_method = None
+    eigenvalue_enabled = bool(eigenvalue_config.get("all", False))
+    eigenvalue_every_n_steps = int(eigenvalue_config.get("every_n_steps", 50))
+    if eigenvalue_enabled and eigenvalue_every_n_steps <= 0:
+        raise ValueError("[eigenvalues].every_n_steps must be a positive integer")
 
     lyapunov_config = config.get("lyapunov", {})
     lyapunov_enabled = bool(lyapunov_config.get("enabled", False))
-    lyapunov_renormalize_dt = float(lyapunov_config.get("renormalize_dt", max(dt, 0.1)))
+    lyapunov_renormalize_dt = float(
+        lyapunov_config.get("renormalize_dt", max(dt, 0.1))
+    )
     lyapunov_transient = float(lyapunov_config.get("transient", 0.0))
 
     if lyapunov_enabled and lyapunov_renormalize_dt <= 0.0:
@@ -180,11 +239,9 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
     if lyapunov_enabled and lyapunov_transient < 0.0:
         raise ValueError("[lyapunov].transient must be >= 0")
 
-    # Both diagnostics use the same correctly signed ODE Jacobian.
     jacobian_enabled = eigenvalue_enabled or lyapunov_enabled
 
     context = {
-        #"model_name": config["model_name"],   # No!!! Use the toml filename!
         "model_name": model_name,
         "parameters": parameters,
         "variable_names": variable_names,
@@ -194,52 +251,63 @@ def generate_julia_code(model_name: str, template: str, gui_version: bool = Fals
         "t0": t0,
         "t1": t1,
         "dt": dt,
-        "method": method,
+        "output_dt": output_dt,
+        "flush_every": flush_every,
+        "adaptive": "true" if adaptive else "false",
+        "abstol": abstol,
+        "reltol": reltol,
+        "solver_constructor": solver_constructor,
+        "solver_base_name": solver_base_name,
+        "problem_type": problem_type,
+        "solver_is_dae": solver_is_dae,
         "variable_count": len(variable_names),
         "differential_vars_list": differential_vars_list,
-    }
-
-    # Add to context for template rendering
-    context.update({
         "eigenvalue_enabled": eigenvalue_enabled,
-        "eigenvalue_method": eigenvalue_method,
+        "eigenvalue_every_n_steps": eigenvalue_every_n_steps,
         "lyapunov_enabled": lyapunov_enabled,
         "lyapunov_renormalize_dt": lyapunov_renormalize_dt,
         "lyapunov_transient": lyapunov_transient,
         "jacobian_enabled": jacobian_enabled,
-    })
+    }
 
     julia_code = render_template(template, context)
     outpath = model_dir / f"{model_name}{suffix}.jl"
-    with open(outpath, "w") as f:
-        f.write(julia_code)
-    print(f"Wrote Julia code to: {outpath}")
+    outpath.write_text(julia_code)
+    print(
+        f"Wrote Julia code to: {outpath} "
+        f"({problem_type.upper()}Problem, {solver_constructor})"
+    )
+    return outpath
 
-if __name__ == "__main__":
+
+def main():
     import sys
+
     if len(sys.argv) != 2:
         print("Usage: python3 generate_julia_odesolver.py <model_name>")
-        sys.exit(1)
+        return 1
 
-    TEMPLATE_1_PATH = "./templates/ode_dae_solver_gui.jl.template"
-    TEMPLATE_2_PATH = "./templates/ode_dae_solver_cmdl.jl.template"
-
+    gui_template_path = Path("templates/ode_dae_solver_gui.jl.template")
+    cmdl_template_path = Path("templates/ode_dae_solver_cmdl.jl.template")
     model_name = sys.argv[1]
 
     try:
-        with open(TEMPLATE_1_PATH, 'r') as f:
-            gui_template = f.read()
-            generate_julia_code(model_name, gui_template, gui_version=True)
-
-        with open(TEMPLATE_2_PATH, 'r') as f:
-            standalone_template = f.read()
-            generate_julia_code(model_name, standalone_template, gui_version=False)
-
-    except ModelValidationError as e:
+        generate_julia_code(
+            model_name, gui_template_path.read_text(), gui_version=True
+        )
+        generate_julia_code(
+            model_name, cmdl_template_path.read_text(), gui_version=False
+        )
+    except ModelValidationError as exc:
         print()
-        print(e)
+        print(exc)
         print("No Julia solver was generated.")
-        sys.exit(2)
+        return 2
 
-    print(f"Generated GUI and standalone Julia DAE solvers for model: {model_name}")
+    print(f"Generated GUI and standalone Julia solvers for model: {model_name}")
     print(f"Run standalone with: julia models/{model_name}_cmdl.jl")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
