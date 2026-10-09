@@ -1,159 +1,322 @@
 model_name = "mmm_0_4"
-# MMT government-price-anchor + private markup + universal JG buffer.
-# Nominal unit = the currency; time unit = year; labour = worker-years.
-# This is a new, deliberately small model, not an exact reproduction of Levey.
-# With w_JG = 0.0 the JG switches OFF; the government retains a nominal
-# anchor through its public-service wage and goods procurement bids.
-# IMPORTANT: The existing code generator uses TOML insertion order for u0.
-# Do not reorder [initial_conditions] independently of [variables].
+# MMT / post-Keynesian prototype with:
+#   * a fixed nominal JG wage as the labour-price anchor,
+#   * regular government employment determined by desired public services,
+#   * private employment determined by effective demand,
+#   * a low-wage JG as the residual labour buffer,
+#   * a simple gross-investment demand term.
+#
+# Units:
+#   time   = year
+#   labour = worker-years
+#   nominal stocks/flows = currency units
+#
+# IMPORTANT: t = 50 therefore means FIFTY YEARS, not six months.
 
 [parameters]
-# Demography and physical labour productivity (units of output/worker/year).
+# ---------------------------------------------------------------------------
+# Population and productivity
+# ---------------------------------------------------------------------------
 N0 = 100.0
 beta = 0.01
+
 A_F0 = 1.0
 A_G0 = 1.0
 A_JG0 = 0.5
+
 alpha_F = 0.02
 alpha_G = 0.02
 alpha_JG = 0.01
 
-# Exogenous policy PRICES, not employment-share targets.
-# w_base > 0 guarantees a nominal anchor even when w_JG = 0.
+# ---------------------------------------------------------------------------
+# Nominal wage / price anchor
+# ---------------------------------------------------------------------------
 w_base = 1.0
-w_JG = 0.6                  # 0 => no JG; >0 => all residual workers employed by JG
-premium_G = 0.5             # w_G = w_JG + premium_G*w_base; requires premium_G>0
-premium_F = 0.0             # w_F = (1+premium_F)*w_G; sign sets firm/public wage gap
-p_goods_factor = 1.2        # Government goods bid P_G = p_goods_factor*w_base/A_F0
+w_JG = 0.6
 
-# Fiscal procurement budgets, NOT labour employment targets.
-# Government public employment is derived from payroll/w_G, not fixed as a share.
-public_payroll = 11.0       # nominal government payroll per year (non-JG jobs)
-goods_budget = 6.0          # nominal spending on goods at posted P_G, per year
-r_H = 0.15                 # proportional wage-income tax
-r_F = 0.05                 # simplified turnover tax on firm sales (not profit tax)
+# Regular public employment is deliberately preferable to the JG.
+premium_G = 0.5
+wage_gap_F = -0.2
+# w_G = w_JG + premium_G*w_base = 1.1
+# w_F = (1 + wage_gap_F)*w_G      = 0.88
+# Hence: w_JG < w_F < w_G in the reference calibration.
 
-# Household consumption: share of after-tax wage flow, plus draw on deposits.
-c_w = 0.65
-c_m = 0.10                 # per-year propensity to spend from deposits
+p_goods_factor = 1.2
 
-# Private market: unit-labour-cost mark-up with demand-responsive *relative* price.
-monopoly = 0.20             # private mark-up on nominal unit labour cost
-eta_p = 0.35               # markup pressure from goods-market excess demand
-tau_P = 1.0                # price adjustment rate, 1/year
-kappa_L = 0.7              # firm labour adjustment rate, 1/year
+# ---------------------------------------------------------------------------
+# Regular government services and procurement
+# ---------------------------------------------------------------------------
+# Government chooses a real public-service quantity per person rather than a
+# fixed nominal payroll.  q_G_pc grows with public-sector productivity in the
+# reference calibration, leaving regular public employment near a stable share
+# of the labour force instead of shrinking mechanically as population grows.
+q_G_pc0 = 0.12
+gamma_G_service = 0.02
+
+# Real government purchases of private-sector goods per person.
+q_goods_pc = 0.10
+
+# ---------------------------------------------------------------------------
+# Taxes and household demand
+# ---------------------------------------------------------------------------
+r_H = 0.15
+r_F = 0.05
+
+c_w = 0.80
+c_m = 0.05
+
+# ---------------------------------------------------------------------------
+# Private production, investment and hiring
+# ---------------------------------------------------------------------------
+monopoly = 0.20
+eta_p = 0.35
+tau_P = 1.0
+
+# Gross private investment demand as a fraction of current private real output.
+# This is a REAL-DEMAND closure only.  Bank-credit finance is deliberately left
+# for a later model with explicit bank assets/liabilities and interest flows.
+iota_F = 0.08
+
+# Firms normally plan some spare productive capacity.  Effective demand is
+# therefore compared with output at a target utilization below one.
+u_F_target = 0.95
+
+# Firm employment adjusts toward the demand-consistent level.
+kappa_L = 1.5
 
 
-# Optional hard admissibility constraints owned by this model specification.
-# Quantities not listed here are deliberately unconstrained by the parser.
-[limits.parameters.premium_F]
+# ---------------------------------------------------------------------------
+# Optional model-owned admissibility limits
+# ---------------------------------------------------------------------------
+[limits.parameters.wage_gap_F]
 min = -1.0
 min_inclusive = false
-description = "Firm wage multiplier (1 + premium_F) must remain positive"
+description = "Firm wage multiplier (1 + wage_gap_F) must remain positive"
+
+[limits.parameters.u_F_target]
+min = 0.0
+min_inclusive = false
+max = 1.0
+description = "Target private-sector utilization must lie in (0,1]"
+
+[limits.parameters.iota_F]
+min = 0.0
+max = 1.0
+description = "Gross investment-demand share must lie in [0,1]"
 
 [limits.initial_conditions.lambda_F]
 min = 0.0
 max = 1.0
 description = "Initial firm-employment fraction must lie in [0,1]"
 
+
 [variables]
-# All five variables have ODEs. Stock variables are in nominal currency units.
-# G_N is government's net financial position, NOT a bank deposit.
-# It goes negative when spending exceeds taxes; F_D + W_D + G_N is conserved.
+# F_D and W_D are private financial positions in this simplified consolidated
+# accounting. G_N is the signed consolidated government net financial position.
+# With the initial condition below, F_D + W_D + G_N = 0 and the Godley flows
+# conserve that identity.
 names = ["P", "lambda_F", "F_D", "W_D", "G_N"]
 
+
 [initial_conditions]
-# MUST match the order in [variables].names for current Julia template.
 P = 1.5
-lambda_F = 0.65
+lambda_F = 0.95
 F_D = 100.0
 W_D = 100.0
 G_N = -200.0
 
+
 [equations.auxiliary]
-# Demography; A variables are physical productivity LEVELS, alpha are growth rates.
+# ---------------------------------------------------------------------------
+# Demography and productivity
+# ---------------------------------------------------------------------------
 N = "N0 * exp(beta*t)"
 A_F = "A_F0 * exp(alpha_F*t)"
 A_G = "A_G0 * exp(alpha_G*t)"
 A_JG = "A_JG0 * exp(alpha_JG*t)"
 
-# Government policy wages are nominal price offers, not market-clearing prices.
+# ---------------------------------------------------------------------------
+# Policy wages and government purchase price
+# ---------------------------------------------------------------------------
 w_G = "w_JG + premium_G*w_base"
-w_F = "(1 + premium_F)*w_G"
-P_G = "p_goods_factor*w_base/A_F0"
+w_F = "(1 + wage_gap_F)*w_G"
 
-# Public-service employment is budget-determined at the public wage.
-# ADMISSIBLE parameter range: public_payroll/w_G < N0; 0<=lambda_F<=1.
-L_G = "public_payroll/w_G"
+# The government goods bid is tied to the nominal wage anchor but allows the
+# quantity price to fall with private productivity.
+P_G = "p_goods_factor*w_base/A_F"
+
+# ---------------------------------------------------------------------------
+# Regular public employment first; JG only receives the residual labour pool
+# ---------------------------------------------------------------------------
+q_G_pc = "q_G_pc0 * exp(gamma_G_service*t)"
+Q_G_des = "q_G_pc*N"
+L_G = "Q_G_des/A_G"
+
 N_res = "N - L_G"
 L_F = "lambda_F*N_res"
-U3 = "N_res - L_F"                   # NON-JG labour slack proxy, not published official U-3
-L_JG = "(w_JG > 0.0)*U3"           # automatic employment buffer; exactly 0 if JG off
-L_total = "L_F + L_G + L_JG"
-U_open = "N - L_total"             # 0 if JG on, U3 if off
-Q_F = "A_F*L_F"
-Q_G = "A_G*L_G"                    # nonmarket public-service output
-Q_JG = "A_JG*L_JG"                 # separately reported JG useful-service output
+U3 = "N_res - L_F"
+L_JG = "(w_JG > 0.0)*U3"
 
-# Government spending: each item is separately accounted below in [godley].
+L_total = "L_F + L_G + L_JG"
+U_open = "N - L_total"
+
+# Useful labour-share diagnostics.
+lambda_G = "L_G/N"
+lambda_JG = "L_JG/N"
+lambda_regular = "(L_F + L_G)/N"
+u3_rate = "U3/N"
+
+# ---------------------------------------------------------------------------
+# Real output
+# ---------------------------------------------------------------------------
+Q_F = "A_F*L_F"
+Q_G = "A_G*L_G"
+Q_JG = "A_JG*L_JG"
+Q_total = "Q_F + Q_G + Q_JG"
+
+# ---------------------------------------------------------------------------
+# Government spending
+# ---------------------------------------------------------------------------
 G_G = "w_G*L_G"
 G_JG = "w_JG*L_JG"
-G_goods = "goods_budget"
-Q_goods = "G_goods/P_G"            # assumes firms accept government's posted bid
+
+Q_goods = "q_goods_pc*N"
+G_goods = "P_G*Q_goods"
+
 G_total = "G_G + G_JG + G_goods"
 
-# Firm wages, household demand, tax bases and final private sales.
+# ---------------------------------------------------------------------------
+# Household income and consumption
+# ---------------------------------------------------------------------------
 W_F = "w_F*L_F"
 W_all = "W_F + G_G + G_JG"
+
 T_H = "r_H*W_all"
 C = "c_w*(W_all - T_H) + c_m*W_D"
-Sales_F = "C + G_goods"
-T_F = "r_F*Sales_F"                 # TURNOVER tax (transparent simplification)
-T_total = "T_H + T_F"
-Q_demand = "C/P + Q_goods"         # private buyers pay P; government pays P_G
 
-# Unit-labour-cost private pricing and relative markup pressure.
-# Government supplies the nominal reference through its offered wage and goods bid.
-# P itself is permitted to deviate with private costs and shortages.
-excess = "(Q_demand - Q_F)/(A_F*N_res)"
+# ---------------------------------------------------------------------------
+# Private gross investment demand
+# ---------------------------------------------------------------------------
+# At this aggregation level investment is a purchase within the consolidated
+# firm sector. It contributes to REAL final demand and desired production but
+# does not create a net F_D -> F_D financial transfer.
+I_real = "iota_F*Q_F"
+I_nom = "P*I_real"
+
+# ---------------------------------------------------------------------------
+# Firm sales, taxes and effective demand
+# ---------------------------------------------------------------------------
+Sales_external = "C + G_goods"
+
+# Turnover tax includes final consumption, government procurement and gross
+# investment production, although the investment payment itself nets within
+# the consolidated firm sector.
+Taxable_F = "Sales_external + I_nom"
+T_F = "r_F*Taxable_F"
+T_total = "T_H + T_F"
+
+# Real demand for private production.
+Q_demand = "C/P + Q_goods + I_real"
+
+# Firms plan spare capacity, so demand consistent output exceeds current demand
+# by 1/u_F_target.
+Q_required = "Q_demand/u_F_target"
+
+# Normalized private-goods demand gap.
+excess = "(Q_required - Q_F)/(A_F*N_res)"
+
+# Diagnostic utilization ratio.
+u_F = "Q_demand/Q_F"
+
+# ---------------------------------------------------------------------------
+# Private pricing
+# ---------------------------------------------------------------------------
 P_unit_cost = "w_F/A_F"
 P_target = "(1 + monopoly)*P_unit_cost*exp(eta_p*excess)"
-pi_rate = "tau_P*(P_target/P - 1)" # instantaneous inflation, f_P/P
+pi_rate = "tau_P*(P_target/P - 1)"
 
-# Sector balances for diagnostics; identity: S_NG = G_total - T_total.
+# ---------------------------------------------------------------------------
+# Fiscal / national-account diagnostics
+# ---------------------------------------------------------------------------
 S_NG = "G_total - T_total"
-Y_F_nom = "C + G_goods"           # total realized nominal firm sales
+NFA_private = "F_D + W_D"
+
+# Expenditure-side nominal output proxy. Government purchases of private goods
+# are already included in G_goods; regular public and JG services are valued at
+# their payroll cost.
+Y_exp_nom = "C + I_nom + G_goods + G_G + G_JG"
+
 
 [godley]
-# [source account, destination account, nominal currency flow/year, description]
-# All flow amounts MUST be nonnegative in intended admissible trajectories.
-# Government expenditure: counterpart is G_N decreasing, recipient deposits rising.
+# [source account, destination account, nominal flow/year, description]
+#
+# These flows preserve:
+#     d(F_D + W_D + G_N)/dt = 0
+#
+# Investment is not listed because it is an intra-firm-sector purchase in this
+# deliberately consolidated version.
 T1 = ["F_D", "W_D", "W_F", "Firm wages"]
-T2 = ["G_N", "W_D", "G_G", "Public-service payroll"]
+T2 = ["G_N", "W_D", "G_G", "Regular public-service payroll"]
 T3 = ["G_N", "W_D", "G_JG", "JG buffer payroll"]
-T4 = ["G_N", "F_D", "G_goods", "Government goods procurement at posted bid"]
+T4 = ["G_N", "F_D", "G_goods", "Government purchases of private goods"]
 T5 = ["W_D", "F_D", "C", "Household consumption purchases"]
 T6 = ["W_D", "G_N", "T_H", "Household wage-income tax"]
 T7 = ["F_D", "G_N", "T_F", "Firm turnover tax"]
 
+
 [equations.ode]
-# Anchored private price adjustment; not an exogenous CPI inflation process.
+# Private price adjustment around the government-anchored nominal structure.
 f_P = "tau_P*(P_target - P)"
-# Within (0,1), lambda_F remains within (0,1) under this logistic adjustment.
-# Employment responds to real effective demand relative to firms' output.
+
+# Firms hire or release labour according to effective demand.  The logistic
+# factor keeps lambda_F inside (0,1) when started there.
 f_lambda_F = "kappa_L*lambda_F*(1 - lambda_F)*excess"
-# f_F_D, f_W_D, f_G_N supplied entirely by the [godley] transactions above.
+
+# f_F_D, f_W_D and f_G_N are generated from [godley].
+
 
 [tspan]
 t0 = 0.0
 t1 = 50.0
 
+
 [solver]
 dt = 0.1
-method = "Tsit5" # metadata; current template still hardcodes Sundials.IDA()
+method = "Tsit5"
+adaptive = false
+output_dt = 0.1
+abstol = 1e-8
+reltol = 1e-6
+
 
 [plots]
-time_series = ["P", "lambda_F", "F_D", "W_D", "G_N", "U3", "U_open", "L_JG", "pi_rate"]
+time_series = [
+    "P",
+    "lambda_F",
+    "lambda_G",
+    "lambda_JG",
+    "u3_rate",
+    "L_F",
+    "L_G",
+    "L_JG",
+    "Q_F",
+    "Q_G",
+    "Q_JG",
+    "F_D",
+    "W_D",
+    "G_N",
+    "pi_rate"
+]
+combine_stability_lyapunov_plots = false
+
 
 [eigenvalues]
-all = false # existing template's residual Jacobian has wrong sign for stability
+# This model is explicitly time-dependent through population/productivity
+# growth, so instantaneous Jacobian eigenvalues should be interpreted locally.
+all = false
+
+
+[lyapunov]
+enabled = true
+renormalize_dt = 0.5
+transient = 5.0

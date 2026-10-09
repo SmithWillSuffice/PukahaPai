@@ -20,6 +20,92 @@ import plotly.graph_objects as go
 import re
 
 
+# ---------------------------------------------------------------------------
+# Time-series axis aesthetics
+# ---------------------------------------------------------------------------
+
+_NEAR_CONSTANT_REL_TOL = 1.0e-6
+_NEAR_CONSTANT_ABS_TOL = 1.0e-12
+_NEAR_CONSTANT_PAD_FRACTION = 0.10
+
+
+def _time_series_axis_options(values):
+    """
+    Return Plotly y-axis options for a time series.
+
+    Plotly's automatic range is normally preferable.  The exception is an
+    almost-constant series: if the numerical span is only floating-point
+    noise compared with the level of the series, autoranging magnifies that
+    noise and can produce ugly tick labels such as
+    ``0.11999999999999995``.
+
+    For such a series we display a deliberately small window of +/-10% around
+    its central value.  This makes the intended visual statement clear: the
+    quantity is essentially constant, rather than genuinely varying over the
+    machine-precision range.
+
+    Tick labels use a trimmed significant-digit format for *all* time-series
+    axes so binary floating-point artefacts are not exposed to the reader.
+
+    Parameters
+    ----------
+    values:
+        Array-like numerical series.
+
+    Returns
+    -------
+    dict
+        Keyword arguments suitable for a Plotly axis dictionary.
+    """
+    arr = np.asarray(values, dtype=float)
+    finite = arr[np.isfinite(arr)]
+
+    options = {
+        # Six significant digits is ample for a visual diagnostic, while "~"
+        # removes unnecessary trailing zeros.
+        "tickformat": ".6~g",
+        "nticks": 6,
+    }
+
+    if finite.size == 0:
+        return options
+
+    y_min = float(np.min(finite))
+    y_max = float(np.max(finite))
+    span = y_max - y_min
+    centre = 0.5 * (y_min + y_max)
+
+    # Test constancy relative to the actual level, not to an arbitrary global
+    # scale.  The absolute tolerance handles exact/near-zero series.
+    scale = max(abs(y_min), abs(y_max), abs(centre))
+    near_constant = span <= max(
+        _NEAR_CONSTANT_ABS_TOL,
+        _NEAR_CONSTANT_REL_TOL * scale,
+    )
+
+    if near_constant:
+        if abs(centre) > _NEAR_CONSTANT_ABS_TOL:
+            pad = _NEAR_CONSTANT_PAD_FRACTION * abs(centre)
+        else:
+            # There is no meaningful "10% of zero".  A modest symmetric
+            # window communicates that an exactly-zero series is constant.
+            pad = 0.1
+
+        # Store aesthetically rounded bounds as well; tickformat controls what
+        # the user sees, but clean numeric bounds also avoid propagating binary
+        # artefacts into the generated Plotly JSON.
+        lower = float(f"{centre - pad:.12g}")
+        upper = float(f"{centre + pad:.12g}")
+        options["range"] = [lower, upper]
+
+    return options
+
+
+def _time_series_hovertemplate(var_name):
+    """Compact hover label matching the cleaned y-axis tick formatting."""
+    return f"{var_name}: %{{y:.6g}}<extra></extra>"
+
+
 def load_config(model_name):
     config_path = os.path.join("models", f"{model_name}.toml")
     if not os.path.exists(config_path):
@@ -324,32 +410,42 @@ def plot_time_series(df, time_var, value_vars):
 
 
 def plot_single_time_series(df, time_var, value_var):
+   axis_options = _time_series_axis_options(df[value_var])
+
    fig = go.Figure()
-   fig.add_trace(go.Scatter(x=df[time_var], y=df[value_var],
-                            mode='lines', name=value_var))
+   fig.add_trace(go.Scatter(
+      x=df[time_var],
+      y=df[value_var],
+      mode='lines',
+      name=value_var,
+      hovertemplate=_time_series_hovertemplate(value_var),
+   ))
    fig.update_layout(
-      title=f"Time Series: {value_var}",
-        xaxis=dict( title=time_var,
-        showgrid=True,
-        gridcolor='rgba(100, 100, 100, 0.3)',
-        zeroline=True,
-        zerolinecolor='rgba(100, 100, 100, 0.5)',
-        zerolinewidth=1
-        ),
-      yaxis=dict( title=value_var,  
-        showgrid=True,
-        gridcolor='rgba(100, 100, 100, 0.3)',
-        zeroline=True,
-        zerolinecolor='rgba(100, 100, 100, 0.5)',
-        zerolinewidth=1
-        ),
+      #title=f"Time Series: {value_var}",
+      title=f"{value_var}",
+      xaxis=dict(
+         title=time_var,
+         showgrid=True,
+         gridcolor='rgba(100, 100, 100, 0.3)',
+         zeroline=True,
+         zerolinecolor='rgba(100, 100, 100, 0.5)',
+         zerolinewidth=1
+      ),
+      yaxis=dict(
+         title=value_var,
+         showgrid=True,
+         gridcolor='rgba(100, 100, 100, 0.3)',
+         zeroline=True,
+         zerolinecolor='rgba(100, 100, 100, 0.5)',
+         zerolinewidth=1,
+         **axis_options,
+      ),
       paper_bgcolor="black",
       plot_bgcolor="black",
       font=dict(color="white"),
       height=400,
    )
    return fig
-
 
 def plot_dual_axis_time_series(df, time_var, value_vars):
     var1, var2 = value_vars
@@ -362,16 +458,32 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
     faint1 = 'rgba(31, 119, 180, 0.4)'
     faint2 = 'rgba(255, 127, 14, 0.4)'
 
+    axis1_options = _time_series_axis_options(df[var1])
+    axis2_options = _time_series_axis_options(df[var2])
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df[time_var], y=df[var1],
-                                mode='lines', name=var1, yaxis='y1',
-                                line=dict(color=color1)))
-    fig.add_trace(go.Scatter(x=df[time_var], y=df[var2],
-                                mode='lines', name=var2, yaxis='y2',
-                                line=dict(color=color2)))
+    fig.add_trace(go.Scatter(
+        x=df[time_var],
+        y=df[var1],
+        mode='lines',
+        name=var1,
+        yaxis='y1',
+        line=dict(color=color1),
+        hovertemplate=_time_series_hovertemplate(var1),
+    ))
+    fig.add_trace(go.Scatter(
+        x=df[time_var],
+        y=df[var2],
+        mode='lines',
+        name=var2,
+        yaxis='y2',
+        line=dict(color=color2),
+        hovertemplate=_time_series_hovertemplate(var2),
+    ))
 
     fig.update_layout(
-        title=f"Time Series: {var1} & {var2}",
+        #title=f"Time Series: {var1} & {var2}",
+        title=f"{var1} & {var2}",
         paper_bgcolor="black",
         plot_bgcolor="black",
         font=dict(color="white"),
@@ -390,7 +502,8 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
             zeroline=True,
             zerolinecolor=faint1,
             zerolinewidth=1,
-            tickfont=dict(color=color1)
+            tickfont=dict(color=color1),
+            **axis1_options,
         ),
         yaxis2=dict(
             title=dict(text=var2, font=dict(color=color2)),
@@ -401,7 +514,8 @@ def plot_dual_axis_time_series(df, time_var, value_vars):
             zeroline=True,
             zerolinecolor=faint2,
             zerolinewidth=1,
-            tickfont=dict(color=color2)
+            tickfont=dict(color=color2),
+            **axis2_options,
         )
     )
     return fig

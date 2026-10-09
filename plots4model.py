@@ -219,7 +219,7 @@ def main(model_name):
         background: {INACTIVE_TAB};
         color: white;
         border: 0;
-        border-radius: 6px;
+        border-radius: 1px;
         padding: 0.65rem 1.15rem;
         font-size: 0.95rem;
         font-weight: 600;
@@ -238,7 +238,7 @@ def main(model_name):
         padding: 1rem 1.2rem;
         background: #111;
         color: #ddd;
-        border-radius: 6px;
+        border-radius: 1px;
     }}
     .analysis-section + .analysis-section {{
         border-top: 1px solid #333;
