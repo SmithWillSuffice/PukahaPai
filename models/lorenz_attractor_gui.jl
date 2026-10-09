@@ -2,14 +2,10 @@
 # lorenz_attractor_gui.jl - generated GUI solver
 
 using DifferentialEquations
-
 using Mmap
 using Sockets
 using SharedArrays
-
 using LinearAlgebra, ForwardDiff
-
-
 
 function rhs_vector(u, p, t)
     out = similar(u)
@@ -24,13 +20,9 @@ function compute_ode_jacobian(integrator)
     return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
-
-
 function compute_jacobian_and_eigenvals(integrator)
     return eigvals(compute_ode_jacobian(integrator))
 end
-
-
 
 mutable struct LargestLyapunovState
     v::Vector{Float64}
@@ -110,19 +102,14 @@ function finalize_largest_lyapunov!(state, outfile)
     end
 end
 
-
 # Auto-generated struct for shared memory interop.
 struct lorenz_attractor_Shared
     state::UInt8
     t0::Float64
     t1::Float64
-
     sigma::Float64
-
     rho::Float64
-
     beta::Float64
-
 end
 
 function open_shared_lorenz_attractor()
@@ -185,51 +172,26 @@ const output_flush_every = 10
 function rhs!(out, u, p, t)
     shared = GUI_PARAMS[]
     shared === nothing && error("GUI parameters have not been initialized")
-    
     sigma = shared.sigma
-    
     rho = shared.rho
-    
     beta = shared.beta
-    
-
-    
     x = u[1]
-    
     y = u[2]
-    
     z = u[3]
-    
-
-    
-
-    
     f_x = sigma * (y - x)
-    
     f_y = x * (rho - z) - y
-    
     f_z = x * y - beta * z
-    
-
-    
     out[1] = f_x
-    
     out[2] = f_y
-    
     out[3] = f_z
-    
     return nothing
 end
 
 function dae!(out, du, u, p, t)
     rhs!(out, u, p, t)
-    
     out[1] = du[1] - out[1]
-    
     out[2] = du[2] - out[2]
-    
     out[3] = du[3] - out[3]
-    
     return nothing
 end
 
@@ -237,33 +199,23 @@ function main()
     GUI_PARAMS[] = read_shared_params()
 
     u0 = [
-        
         1.0,
-        
         0.0,
-        
         0.0
-        
     ]
 
     tspan = (t0, t1)
-    
     prob = ODEProblem(rhs!, u0, tspan)
-    
 
     outfile = open("models/lorenz_attractor.csv", "w")
     write(outfile, "t,x,y,z\n")
 
-    
     eigen_outfile = open("models/lorenz_attractor_eigen.csv", "w")
     write(eigen_outfile, "t,e1,e2,e3\n")
-    
 
-    
     lyapunov_outfile = open("models/lorenz_attractor_lyapunov.csv", "w")
     write(lyapunov_outfile, "t,lambda_max\n")
     lyapunov_state = make_largest_lyapunov_state(3, t0)
-    
 
     # GUI output is streamed, so flush periodically rather than once per row.
     next_output_t = Ref(t0)
@@ -279,13 +231,9 @@ function main()
 
         y = integrator.u
         write(outfile, string(t))
-        
         write(outfile, "," * string(y[1]))
-        
         write(outfile, "," * string(y[2]))
-        
         write(outfile, "," * string(y[3]))
-        
         write(outfile, "\n")
 
         output_rows_since_flush[] += 1
@@ -304,7 +252,6 @@ function main()
         DiscreteCallback((u,t,integrator)->true, step_callback; save_positions=(false, false)),
     ]
 
-    
     stability_callback = function (integrator)
         if integrator.iter % 50 == 0
             eigs = compute_jacobian_and_eigenvals(integrator)
@@ -323,9 +270,7 @@ function main()
         return false
     end
     push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
-    
 
-    
     lyapunov_callback = function (integrator)
         return update_largest_lyapunov!(
             integrator,
@@ -336,7 +281,6 @@ function main()
         )
     end
     push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
-    
 
     cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
 
@@ -350,18 +294,12 @@ function main()
         reltol=1e-06,
     )
 
-    
     finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
-    
 
     flush(outfile)
     close(outfile)
-    
     close(eigen_outfile)
-    
-    
     close(lyapunov_outfile)
-    
     println("GUI simulation completed successfully using Tsit5() on a ODEProblem")
 end
 

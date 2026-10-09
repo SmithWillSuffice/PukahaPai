@@ -2,19 +2,12 @@
 # lorenz_attractor_cmdl.jl - generated command-line solver
 
 using DifferentialEquations
-
-
 using LinearAlgebra, ForwardDiff
 
-
 # Parameters
-
 const sigma = 10.0
-
 const rho = 28.0
-
 const beta = 2.6
-
 
 # Time/output parameters
 const t0 = 0.0
@@ -24,47 +17,26 @@ const output_dt = 0.01
 
 # Explicit right-hand side shared by ODE and DAE modes.
 function rhs!(out, u, p, t)
-    
     x = u[1]
-    
     y = u[2]
-    
     z = u[3]
-    
-
-    
-
-    
     f_x = sigma * (y - x)
-    
     f_y = x * (rho - z) - y
-    
     f_z = x * y - beta * z
-    
-
-    
     out[1] = f_x
-    
     out[2] = f_y
-    
     out[3] = f_z
-    
     return nothing
 end
 
 # Residual wrapper required only by DAE solvers such as IDA.
 function dae!(out, du, u, p, t)
     rhs!(out, u, p, t)
-    
     out[1] = du[1] - out[1]
-    
     out[2] = du[2] - out[2]
-    
     out[3] = du[3] - out[3]
-    
     return nothing
 end
-
 
 function rhs_vector(u, p, t)
     out = similar(u)
@@ -81,13 +53,9 @@ function compute_ode_jacobian(integrator)
     return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
-
-
 function compute_jacobian_and_eigenvals(integrator)
     return eigvals(compute_ode_jacobian(integrator))
 end
-
-
 
 mutable struct LargestLyapunovState
     v::Vector{Float64}
@@ -172,36 +140,24 @@ function finalize_largest_lyapunov!(state, outfile)
     end
 end
 
-
 # Initial conditions follow [variables].names order.
 u0 = [
-    
     1.0,
-    
     0.0,
-    
     0.0
-    
 ]
 
 tspan = (t0, t1)
-
 prob = ODEProblem(rhs!, u0, tspan)
-
-
 
 eigen_outfile = open("models/lorenz_attractor_eigen.csv", "w")
 write(eigen_outfile, "t,e1,e2,e3\n")
-
-
 
 lyapunov_outfile = open("models/lorenz_attractor_lyapunov.csv", "w")
 write(lyapunov_outfile, "t,lambda_max\n")
 lyapunov_state = make_largest_lyapunov_state(3, t0)
 
-
 callbacks = Any[]
-
 
 stability_callback = function (integrator)
     if integrator.iter % 50 == 0
@@ -222,8 +178,6 @@ stability_callback = function (integrator)
 end
 push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
 
-
-
 lyapunov_callback = function (integrator)
     return update_largest_lyapunov!(
         integrator,
@@ -234,7 +188,6 @@ lyapunov_callback = function (integrator)
     )
 end
 push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
-
 
 cb = Base.isempty(callbacks) ? nothing :
      (Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...))
@@ -263,9 +216,7 @@ else
     )
 end
 
-
 finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
-
 
 # Command-line runs are not streamed to another process: write the saved
 # solution in one buffered pass after integration instead of flushing each row.
@@ -274,22 +225,14 @@ open("models/lorenz_attractor.csv", "w") do outfile
     for i in eachindex(sol.t)
         write(outfile, string(sol.t[i]))
         y = sol.u[i]
-        
         write(outfile, "," * string(y[1]))
-        
         write(outfile, "," * string(y[2]))
-        
         write(outfile, "," * string(y[3]))
-        
         write(outfile, "\n")
     end
 end
 
-
 close(eigen_outfile)
-
-
 close(lyapunov_outfile)
-
 
 println("Simulation completed successfully using Tsit5() on a ODEProblem")

@@ -2,21 +2,13 @@
 # pendulum_cmdl.jl - generated command-line solver
 
 using DifferentialEquations
-
-
 using LinearAlgebra, ForwardDiff
 
-
 # Parameters
-
 const mass = 1.0
-
 const length = 1.0
-
 const damping = 0.1
-
 const g = 9.81
-
 
 # Time/output parameters
 const t0 = 0.0
@@ -26,39 +18,22 @@ const output_dt = 0.01
 
 # Explicit right-hand side shared by ODE and DAE modes.
 function rhs!(out, u, p, t)
-    
     theta = u[1]
-    
     omega = u[2]
-    
-
-    
-
-    
     f_theta = omega
-    
     f_omega = -damping * omega - (g / length) * sin(theta)
-    
-
-    
     out[1] = f_theta
-    
     out[2] = f_omega
-    
     return nothing
 end
 
 # Residual wrapper required only by DAE solvers such as IDA.
 function dae!(out, du, u, p, t)
     rhs!(out, u, p, t)
-    
     out[1] = du[1] - out[1]
-    
     out[2] = du[2] - out[2]
-    
     return nothing
 end
-
 
 function rhs_vector(u, p, t)
     out = similar(u)
@@ -75,13 +50,9 @@ function compute_ode_jacobian(integrator)
     return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
-
-
 function compute_jacobian_and_eigenvals(integrator)
     return eigvals(compute_ode_jacobian(integrator))
 end
-
-
 
 mutable struct LargestLyapunovState
     v::Vector{Float64}
@@ -166,34 +137,23 @@ function finalize_largest_lyapunov!(state, outfile)
     end
 end
 
-
 # Initial conditions follow [variables].names order.
 u0 = [
-    
     0.785398,
-    
     0.0
-    
 ]
 
 tspan = (t0, t1)
-
 prob = ODEProblem(rhs!, u0, tspan)
-
-
 
 eigen_outfile = open("models/pendulum_eigen.csv", "w")
 write(eigen_outfile, "t,e1,e2\n")
-
-
 
 lyapunov_outfile = open("models/pendulum_lyapunov.csv", "w")
 write(lyapunov_outfile, "t,lambda_max\n")
 lyapunov_state = make_largest_lyapunov_state(2, t0)
 
-
 callbacks = Any[]
-
 
 stability_callback = function (integrator)
     if integrator.iter % 50 == 0
@@ -214,8 +174,6 @@ stability_callback = function (integrator)
 end
 push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
 
-
-
 lyapunov_callback = function (integrator)
     return update_largest_lyapunov!(
         integrator,
@@ -226,7 +184,6 @@ lyapunov_callback = function (integrator)
     )
 end
 push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
-
 
 cb = Base.isempty(callbacks) ? nothing :
      (Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...))
@@ -255,9 +212,7 @@ else
     )
 end
 
-
 finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
-
 
 # Command-line runs are not streamed to another process: write the saved
 # solution in one buffered pass after integration instead of flushing each row.
@@ -266,20 +221,13 @@ open("models/pendulum.csv", "w") do outfile
     for i in eachindex(sol.t)
         write(outfile, string(sol.t[i]))
         y = sol.u[i]
-        
         write(outfile, "," * string(y[1]))
-        
         write(outfile, "," * string(y[2]))
-        
         write(outfile, "\n")
     end
 end
 
-
 close(eigen_outfile)
-
-
 close(lyapunov_outfile)
-
 
 println("Simulation completed successfully using Tsit5() on a ODEProblem")

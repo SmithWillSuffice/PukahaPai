@@ -100,8 +100,24 @@ def topological_sort(ode_equations: dict) -> list:
 
 
 def render_template(template: str, context: dict) -> str:
-    from jinja2 import Template
-    return Template(template).render(**context)
+    """
+    Render a Julia template.
+
+    trim_blocks / lstrip_blocks make a line holding only a block tag
+    ({% for %}, {% if %}, ...) vanish from the output, so loops emit tight
+    code.  Blank lines in the generated Julia are therefore only the ones
+    written literally in the template.
+    """
+    from jinja2 import Environment
+    env = Environment(
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+    code = env.from_string(template).render(**context)
+    # Disabled optional blocks (Jacobian, eigenvalues, Lyapunov) each leave
+    # their trailing separator behind; keep at most one blank line in a row.
+    return re.sub(r"\n{3,}", "\n\n", code)
 
 
 def substitute_expressions(expr: str, variable_names: list) -> str:

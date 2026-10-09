@@ -2,14 +2,10 @@
 # pendulum_gui.jl - generated GUI solver
 
 using DifferentialEquations
-
 using Mmap
 using Sockets
 using SharedArrays
-
 using LinearAlgebra, ForwardDiff
-
-
 
 function rhs_vector(u, p, t)
     out = similar(u)
@@ -24,13 +20,9 @@ function compute_ode_jacobian(integrator)
     return ForwardDiff.jacobian(u_var -> rhs_vector(u_var, p, t), u)
 end
 
-
-
 function compute_jacobian_and_eigenvals(integrator)
     return eigvals(compute_ode_jacobian(integrator))
 end
-
-
 
 mutable struct LargestLyapunovState
     v::Vector{Float64}
@@ -110,21 +102,15 @@ function finalize_largest_lyapunov!(state, outfile)
     end
 end
 
-
 # Auto-generated struct for shared memory interop.
 struct pendulum_Shared
     state::UInt8
     t0::Float64
     t1::Float64
-
     mass::Float64
-
     length::Float64
-
     damping::Float64
-
     g::Float64
-
 end
 
 function open_shared_pendulum()
@@ -187,45 +173,23 @@ const output_flush_every = 10
 function rhs!(out, u, p, t)
     shared = GUI_PARAMS[]
     shared === nothing && error("GUI parameters have not been initialized")
-    
     mass = shared.mass
-    
     length = shared.length
-    
     damping = shared.damping
-    
     g = shared.g
-    
-
-    
     theta = u[1]
-    
     omega = u[2]
-    
-
-    
-
-    
     f_theta = omega
-    
     f_omega = -damping * omega - (g / length) * sin(theta)
-    
-
-    
     out[1] = f_theta
-    
     out[2] = f_omega
-    
     return nothing
 end
 
 function dae!(out, du, u, p, t)
     rhs!(out, u, p, t)
-    
     out[1] = du[1] - out[1]
-    
     out[2] = du[2] - out[2]
-    
     return nothing
 end
 
@@ -233,31 +197,22 @@ function main()
     GUI_PARAMS[] = read_shared_params()
 
     u0 = [
-        
         0.785398,
-        
         0.0
-        
     ]
 
     tspan = (t0, t1)
-    
     prob = ODEProblem(rhs!, u0, tspan)
-    
 
     outfile = open("models/pendulum.csv", "w")
     write(outfile, "t,theta,omega\n")
 
-    
     eigen_outfile = open("models/pendulum_eigen.csv", "w")
     write(eigen_outfile, "t,e1,e2\n")
-    
 
-    
     lyapunov_outfile = open("models/pendulum_lyapunov.csv", "w")
     write(lyapunov_outfile, "t,lambda_max\n")
     lyapunov_state = make_largest_lyapunov_state(2, t0)
-    
 
     # GUI output is streamed, so flush periodically rather than once per row.
     next_output_t = Ref(t0)
@@ -273,11 +228,8 @@ function main()
 
         y = integrator.u
         write(outfile, string(t))
-        
         write(outfile, "," * string(y[1]))
-        
         write(outfile, "," * string(y[2]))
-        
         write(outfile, "\n")
 
         output_rows_since_flush[] += 1
@@ -296,7 +248,6 @@ function main()
         DiscreteCallback((u,t,integrator)->true, step_callback; save_positions=(false, false)),
     ]
 
-    
     stability_callback = function (integrator)
         if integrator.iter % 50 == 0
             eigs = compute_jacobian_and_eigenvals(integrator)
@@ -315,9 +266,7 @@ function main()
         return false
     end
     push!(callbacks, DiscreteCallback((u,t,integrator)->true, stability_callback; save_positions=(false, false)))
-    
 
-    
     lyapunov_callback = function (integrator)
         return update_largest_lyapunov!(
             integrator,
@@ -328,7 +277,6 @@ function main()
         )
     end
     push!(callbacks, DiscreteCallback((u,t,integrator)->true, lyapunov_callback; save_positions=(false, false)))
-    
 
     cb = Base.length(callbacks) == 1 ? callbacks[1] : CallbackSet(callbacks...)
 
@@ -342,18 +290,12 @@ function main()
         reltol=1e-06,
     )
 
-    
     finalize_largest_lyapunov!(lyapunov_state, lyapunov_outfile)
-    
 
     flush(outfile)
     close(outfile)
-    
     close(eigen_outfile)
-    
-    
     close(lyapunov_outfile)
-    
     println("GUI simulation completed successfully using Tsit5() on a ODEProblem")
 end
 

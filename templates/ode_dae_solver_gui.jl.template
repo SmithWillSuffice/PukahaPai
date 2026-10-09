@@ -186,19 +186,15 @@ function rhs!(out, u, p, t)
     {% for name in parameters.keys() %}
     {{ name }} = shared.{{ name }}
     {% endfor %}
-
     {% for name in variable_names %}
     {{ name }} = u[{{ loop.index }}]
     {% endfor %}
-
     {% for name, expr in auxiliary_equations.items() %}
     {{ name }} = {{ expr }}
     {% endfor %}
-
     {% for name, expr in derivative_computations %}
     {{ name }} = {{ expr }}
     {% endfor %}
-
     {% for name in variable_names %}
     out[{{ loop.index }}] = f_{{ name }}
     {% endfor %}
@@ -218,7 +214,7 @@ function main()
 
     u0 = [
         {% for name in variable_names %}
-        {{ initial_conditions[name] }}{% if not loop.last %},{% endif %}
+        {{ initial_conditions[name] }}{{ "," if not loop.last }}
         {% endfor %}
     ]
 
