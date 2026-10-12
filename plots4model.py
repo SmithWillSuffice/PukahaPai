@@ -90,13 +90,18 @@ def _stability_content(model_name, config):
     return f'<div class="analysis-report"><h2>Stability Analysis</h2><p>{msg}</p></div>'
 
 
-def _lyapunov_content(model_name, config):
+def _lyapunov_content(model_name, config, trajectory_df=None):
     enabled = bool(config.get("lyapunov", {}).get("enabled", False))
     lyap_df = load_lyapunov(model_name)
 
     if enabled and lyap_df is not None and not lyap_df.empty:
         figures = generate_lyapunov_figures(lyap_df)
-        report_path = generate_lyapunov_report_html(model_name, lyap_df, config=config)
+        report_path = generate_lyapunov_report_html(
+            model_name,
+            lyap_df,
+            config=config,
+            trajectory_df=trajectory_df,
+        )
         return _figures_html(figures) + f'<div class="analysis-report">{_read_text(report_path)}</div>'
 
     if enabled:
@@ -161,7 +166,7 @@ def main(model_name):
 
     sim_html = _figures_html(_simulation_figures(df, config))
     stability_html = _stability_content(model_name, config)
-    lyapunov_html = _lyapunov_content(model_name, config)
+    lyapunov_html = _lyapunov_content(model_name, config, trajectory_df=df)
 
     plots_cfg = config.get("plots", {})
     combine = bool(plots_cfg.get("combine_stability_lyapunov_plots", False))
